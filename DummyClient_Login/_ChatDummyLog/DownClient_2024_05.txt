@@ -1,0 +1,2 @@
+[DownClient][2024.05.12 22:26:20 / SYSTM /          2] ClientDown RequestDelay:804 RequestPacket:0 recv LastPacket:6 recv LastTime:804 State:9 AccountNo:1
+[DownClient][2024.05.12 22:26:20 / SYSTM /          3] ClientDown RequestDelay:402 RequestPacket:0 recv LastPacket:6 recv LastTime:1641 State:2 AccountNo:1
