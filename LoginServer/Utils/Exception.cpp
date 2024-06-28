@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "Exception.h"
 
 const char* SerializingBufferException::what() const noexcept

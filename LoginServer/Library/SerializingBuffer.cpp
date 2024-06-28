@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "SerializingBuffer.h"
 
 CPacket::CPacket() : m_iDataSize(0), m_iBufferSize(eBUFFER_DEFAULT), m_chpBuffer(nullptr), isEncoded(false), ref_cnt(0)

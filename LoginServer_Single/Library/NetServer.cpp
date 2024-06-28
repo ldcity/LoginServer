@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "NetServer.h"
 
 // ========================================================================
@@ -481,7 +481,7 @@ bool NetServer::TimeoutThread_serv()
 
 			// ----------------------------------------------------------------------
 			// 이곳에 진입한 세션들은 타임아웃 시켜줘야 함
-			OnTimeout(sessionID);		// Contents 서버에서 타임아웃 관련 logic 처리
+			//OnTimeout(sessionID);		// Contents 서버에서 타임아웃 관련 logic 처리
 
 			// 타임아웃 예약 종료 건이라면 flag 다시 되돌려줌
 			if (SessionArray[i].sendDisconnFlag == true)
@@ -492,6 +492,12 @@ bool NetServer::TimeoutThread_serv()
 	}
 
 	return true;
+}
+
+// 타임아웃 주기 : 현재 시간 ~ 서버의 타임아웃 시간 (ms 단위)
+void NetServer::SetTimeout(stSESSION * session)
+{
+	InterlockedExchange(&session->Timer, timeGetTime() + mTimeout);
 }
 
 bool NetServer::RecvProc(stSESSION* pSession, long cbTransferred)

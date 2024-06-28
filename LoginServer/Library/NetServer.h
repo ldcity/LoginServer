@@ -2,7 +2,7 @@
 #ifndef __NETSERVER_CLASS__
 #define __NETSERVER_CLASS__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #define MAX_SESSION 500
 
@@ -59,6 +59,13 @@ protected:
 	virtual void OnRecv(uint64_t sessionID, CPacket* packet) = 0;
 
 	// ==========================================================
+	// 컨텐츠에서 IOCP로 job 전달
+	// [PARAM] __int64 sessionID, CPacket* packet
+	// [RETURN] X 
+	// ==========================================================
+	virtual void OnJob(uint64_t sessionID, CPacket* packet) = 0;
+
+	// ==========================================================
 	// 세션 타임아웃 관련 처리
 	// [PARAM] __int64 sessionID
 	// [RETURN] X 
@@ -71,6 +78,9 @@ protected:
 	// [RETURN] X 
 	// ==========================================================
 	virtual void OnError(int errorCode, const wchar_t* msg) = 0;
+
+protected:
+	void JobPQCS(uint64_t sessionID, CPacket* packet);
 
 private:
 	friend unsigned __stdcall AcceptThread(void* param);
@@ -160,6 +170,8 @@ private:
 		TIMEOUT,
 		STOP,
 	};
+
+	const DWORD PQCSJobType = 0xaaaabbbb;
 
 protected:
 	bool runFlag;

@@ -2,7 +2,7 @@
 #ifndef __LOG __H__
 #define __LOG __H__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #define dfLOG_LEVEL_DEBUG		0
 #define dfLOG_LEVEL_ERROR		1

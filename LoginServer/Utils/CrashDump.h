@@ -2,7 +2,7 @@
 #ifndef __CRASH_DUMP__
 #define __CRASH_DUMP__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #include <Windows.h>
 #include <psapi.h>

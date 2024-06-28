@@ -2,7 +2,7 @@
 #ifndef __TLS_FREE_LIST_VER2__
 #define __TLS_FREE_LIST_VER2__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 /*
 * TLSFreeList Class
@@ -23,7 +23,7 @@ TLSIndex에 버킷 포인터 확인
 
 #include "LockFreeStack.h"
 
-#define BUCKETMAX				100			// 버킷 개수 (pTop)
+#define BUCKETMAX				20			// 버킷 개수 (pTop)
 #define NODEMAX					10000		// 버킷 당 들어있는 노드 개수
 
 struct Node;

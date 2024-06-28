@@ -1,6 +1,6 @@
 #pragma warning(disable :4996)
 
-#include "PCH.h"
+#include "../PCH.h"
 #include "TextParser.h"
 
 #include <stack>

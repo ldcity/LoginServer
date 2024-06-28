@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "MonitoringLanClient.h"
 
 unsigned __stdcall ConnectThread(LPVOID param)

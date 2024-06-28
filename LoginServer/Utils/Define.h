@@ -1,7 +1,7 @@
 #ifndef __SERVER_DEFINE__
 #define __SERVER_DEFINE__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #define ID_MAX_LEN			20
 #define NICKNAME_MAX_LEN	20

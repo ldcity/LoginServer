@@ -57,10 +57,10 @@
     <ClCompile Include="Utils\TextParser.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="PCH.cpp">
+    <ClCompile Include="Contents\main.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="Contents\main.cpp">
+    <ClCompile Include="PCH.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

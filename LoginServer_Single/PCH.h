@@ -52,4 +52,6 @@
 #include "Contents/MonitoringLanClient.h"
 #include "Library/NetServer.h"
 
+#include "Contents/LoginServer.h"
+
 #endif // __PCH__

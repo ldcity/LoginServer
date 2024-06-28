@@ -1,7 +1,7 @@
 #ifndef __DBCONNECTION_TLS_CLASS__
 #define __DBCONNECTION_TLS_CLASS__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 class DBConnector_TLS
 {

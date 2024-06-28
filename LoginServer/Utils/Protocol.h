@@ -118,7 +118,8 @@ enum en_PACKET_TYPE
 
 
 
-
+	// 로그인 비동기 레디스 요청
+	en_PACKET_SS_LOGIN_REDIS_REQ,
 
 
 	//------------------------------------------------------
@@ -287,84 +288,3 @@ enum en_PACKET_CS_GAME_RES_LOGIN
 	dfGAME_LOGIN_NOCHARACTER = 2,			// 성공 / 캐릭터 없음 > 캐릭터 선택화면으로 전환. 
 	dfGAME_LOGIN_VERSION_MISS = 3,			// 서버,클라 버전 다름
 };	
-
-
-
-//enum en_PACKET_SS_LOGINSERVER_LOGIN
-//{
-//	dfSERVER_TYPE_GAME = 1,
-//	dfSERVER_TYPE_CHAT = 2,
-//	dfSERVER_TYPE_MONITOR = 3,
-//};
-//
-//enum en_PACKET_SS_HEARTBEAT
-//{
-//	dfTHREAD_TYPE_WORKER = 1,
-//	dfTHREAD_TYPE_DB = 2,
-//	dfTHREAD_TYPE_GAME = 3,
-//};
-//
-//// en_PACKET_SS_MONITOR_LOGIN
-//enum en_PACKET_CS_MONITOR_TOOL_SERVER_CONTROL
-//{
-//	dfMONITOR_SERVER_TYPE_LOGIN = 1,
-//	dfMONITOR_SERVER_TYPE_GAME = 2,
-//	dfMONITOR_SERVER_TYPE_CHAT = 3,
-//	dfMONITOR_SERVER_TYPE_AGENT = 4,
-//
-//	dfMONITOR_SERVER_CONTROL_SHUTDOWN = 1,		// 서버 정상종료 (게임서버 전용)
-//	dfMONITOR_SERVER_CONTROL_TERMINATE = 2,		// 서버 프로세스 강제종료
-//	dfMONITOR_SERVER_CONTROL_RUN = 3,		// 서버 프로세스 생성 & 실행
-//};
-//
-//
-//enum en_PACKET_SS_MONITOR_DATA_UPDATE_FIN
-//{
-//	dfMONITOR_DATA_TYPE_LOGIN_SESSION = 1,		// 로그인서버 세션 수 (컨넥션 수)
-//	dfMONITOR_DATA_TYPE_LOGIN_AUTH_TPS = 2,		// 로그인서버 인증 처리 초당 횟수
-//	dfMONITOR_DATA_TYPE_LOGIN_PACKET_POOL = 3,		// 로그인서버 패킷풀 사용량
-//	dfMONITOR_DATA_TYPE_LOGIN_SERVER_ON = 4,		// 켜진서버 서버 개수
-//	dfMONITOR_DATA_TYPE_LOGIN_LIVE_SERVER = 5,		// 현재 라이브 지정 서버 번호
-//
-//	dfMONITOR_DATA_TYPE_GAME_SESSION = 6,		// 게임서버 세션 수 (컨넥션 수)
-//	dfMONITOR_DATA_TYPE_GAME_AUTH_PLAYER = 7,		// 게임서버 AUTH MODE 플레이어 수
-//	dfMONITOR_DATA_TYPE_GAME_GAME_PLAYER = 8,		// 게임서버 GAME MODE 플레이어 수
-//	dfMONITOR_DATA_TYPE_GAME_ACCEPT_TPS = 9,		// 게임서버 Accept 처리 초당 횟수
-//	dfMONITOR_DATA_TYPE_GAME_PACKET_PROC_TPS = 10,		// 게임서버 패킷처리 초당 횟수
-//	dfMONITOR_DATA_TYPE_GAME_PACKET_SEND_TPS = 11,		// 게임서버 패킷 보내기 초당 완료 횟수
-//	dfMONITOR_DATA_TYPE_GAME_DB_WRITE_TPS = 12,		// 게임서버 DB 저장 메시지 초당 처리 횟수
-//	dfMONITOR_DATA_TYPE_GAME_DB_WRITE_MSG = 13,		// 게임서버 DB 저장 메시지 버퍼 개수 (남은 수)
-//	dfMONITOR_DATA_TYPE_GAME_AUTH_THREAD_FPS = 14,		// 게임서버 AUTH 스레드 초당 프레임 수 (루프 수)
-//	dfMONITOR_DATA_TYPE_GAME_GAME_THREAD_FPS = 15,		// 게임서버 GAME 스레드 초당 프레임 수 (루프 수)
-//	dfMONITOR_DATA_TYPE_GAME_PACKET_POOL = 16,		// 게임서버 패킷풀 사용량
-//
-//	dfMONITOR_DATA_TYPE_CHAT_SESSION = 17,		// 채팅서버 세션 수 (컨넥션 수)
-//	dfMONITOR_DATA_TYPE_CHAT_PLAYER = 18,		// 채팅서버 인증성공 사용자 수 (실제 접속자)
-//	dfMONITOR_DATA_TYPE_CHAT_UPDATE_TPS = 19,		// 채팅서버 UPDATE 스레드 초당 초리 횟수
-//	dfMONITOR_DATA_TYPE_CHAT_PACKET_POOL = 20,		// 채팅서버 패킷풀 사용량
-//	dfMONITOR_DATA_TYPE_CHAT_UPDATEMSG_POOL = 21,		// 채팅서버 UPDATE MSG 풀 사용량
-//
-//	dfMONITOR_DATA_TYPE_AGENT_GAME_SERVER_RUN = 22,		// 에이전트 GameServer 실행 여부 ON / OFF
-//	dfMONITOR_DATA_TYPE_AGENT_CHAT_SERVER_RUN = 23,		// 에이전트 ChatServer 실행 여부 ON / OFF
-//	dfMONITOR_DATA_TYPE_AGENT_GAME_SERVER_CPU = 24,		// 에이전트 GameServer CPU 사용률
-//	dfMONITOR_DATA_TYPE_AGENT_CHAT_SERVER_CPU = 25,		// 에이전트 ChatServer CPU 사용률
-//	dfMONITOR_DATA_TYPE_AGENT_GAME_SERVER_MEM = 26,		// 에이전트 GameServer 메모리 사용 MByte
-//	dfMONITOR_DATA_TYPE_AGENT_CHAT_SERVER_MEM = 27,		// 에이전트 ChatServer 메모리 사용 MByte
-//	dfMONITOR_DATA_TYPE_AGENT_CPU_TOTAL = 28,		// 에이전트 서버컴퓨터 CPU 전체 사용률
-//	dfMONITOR_DATA_TYPE_AGENT_NONPAGED_MEMORY = 29,		// 에이전트 서버컴퓨터 논페이지 메모리 MByte	// 최근 수정
-//	dfMONITOR_DATA_TYPE_AGENT_NETWORK_RECV = 30,		// 에이전트 서버컴퓨터 네트워크 수신량 KByte	// 최근 수정
-//	dfMONITOR_DATA_TYPE_AGENT_NETWORK_SEND = 31,		// 에이전트 서버컴퓨터 네트워크 송신량 KByte	// 최근 수정
-//	dfMONITOR_DATA_TYPE_AGENT_ = 32,		// 에이전트 서버컴퓨터 
-//	dfMONITOR_DATA_TYPE_AGENT_AVAILABLE_MEMORY = 33,		// 에이전트 서버컴퓨터 사용가능 메모리
-//};
-//
-//
-//enum en_PACKET_CS_MONITOR_TOOL_RES_LOGIN
-//{
-//	dfMONITOR_TOOL_LOGIN_OK = 1,					// 로그인 성공
-//	dfMONITOR_TOOL_LOGIN_ERR_NOSERVER = 2,			// 서버이름 오류 (매칭미스)
-//	dfMONITOR_TOOL_LOGIN_ERR_SESSIONKEY = 3,		// 로그인 세션키 오류
-//};
-
-
-//#endif

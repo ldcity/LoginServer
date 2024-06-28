@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "Redis.h"
 
 
@@ -19,7 +19,7 @@ void CRedis::Connect(std::wstring IP, unsigned short port)
 	client.connect(IPStr, port);
 }
 
-
+// 동기
 bool CRedis::syncSet(const std::string& key, const std::string& value, int timeout)
 {
 	if (timeout > 0)
@@ -44,6 +44,25 @@ cpp_redis::reply CRedis::syncGet(const std::string& key)
 	return get_reply.get();
 }
 
+// 비동기 set 호출
+void CRedis::asyncSet(const std::string& key, const std::string& value, int timeout, std::function<void(const cpp_redis::reply&)> callback)
+{
+	if (timeout > 0)
+	{
+		client.setex(key, timeout, value, [callback](const cpp_redis::reply& reply)
+			{
+				callback(reply);
+			}).commit();
+	}
+	else
+	{
+		client.set(key, value, [callback](const cpp_redis::reply& reply) mutable
+			{
+				callback(reply);
+			}).commit();
+	}
+
+}
 
 CRedis_TLS::CRedis_TLS(std::wstring IP, unsigned short port)
 {

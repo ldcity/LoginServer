@@ -2,7 +2,7 @@
 #ifndef __SESSION__
 #define __SESSION__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #define MAX_WSA_BUF 200
 #define RELEASEMASKING 0x80000000				// ioRefCount¿¡¼­ ReleaseFlag¸¸ »Ì¾Æ³¿

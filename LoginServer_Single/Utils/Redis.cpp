@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "Redis.h"
 
 
@@ -44,102 +44,24 @@ cpp_redis::reply CRedis::syncGet(const std::string& key)
 	return get_reply.get();
 }
 
-// 비동기
-std::future<bool> CRedis::asyncSet(const std::string& key, const std::string& value, int timeout)
+// 비동기 set 호출
+void CRedis::asyncSet(const std::string& key, const std::string& value, int timeout, std::function<void(const cpp_redis::reply&)> callback)
 {
-	auto promise = std::make_shared<std::promise<bool>>();
-	auto future = promise->get_future();
-
-	if (timeout > 0) {
-		client.setex(key, timeout, value, [promise = std::move(promise)](const cpp_redis::reply& reply) mutable {
-			try {
-			if (reply.is_error()) {
-				promise->set_value(false);
-			}
-			else {
-				promise->set_value(true);
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Exception in promise set_value: " << e.what() << std::endl;
-			promise->set_exception(std::current_exception());
-		}
-			}).commit();
-	}
-	else {
-		client.set(key, value, [promise = std::move(promise)](const cpp_redis::reply& reply) mutable {
-			try {
-			if (reply.is_error()) {
-				promise->set_value(false);
-			}
-			else {
-				promise->set_value(true);
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Exception in promise set_value: " << e.what() << std::endl;
-			promise->set_exception(std::current_exception());
-		}
-			}).commit();
-	}
-
-	return future;
-}
-
-CRedis_TLS::CRedis_TLS(std::wstring IP, unsigned short port)
-{
-	mIP = IP;
-	mPort = port;
-
-	tlsIndex = TlsAlloc();
-	if (tlsIndex == TLS_OUT_OF_INDEXES)
+	if (timeout > 0)
 	{
-		wprintf(L"CRedis_TLS : TLS_OUT_OF_INDEXES\n");
-		CRASH();
+		client.setex(key, timeout, value, [callback](const cpp_redis::reply& reply)
+		{
+			callback(reply);
+		}).commit();
 	}
-}
-
-CRedis_TLS::~CRedis_TLS()
-{
-	CRedis* redisObj;
-
-	while (redisStack.Pop(&redisObj))
+	else
 	{
-		delete redisObj;
+		client.set(key, value, [callback](const cpp_redis::reply& reply) mutable
+		{
+			callback(reply);
+		}).commit();
 	}
 
-	TlsFree(tlsIndex);
-}
-
-bool CRedis_TLS::syncSet(const std::string& key, const std::string& value, int timeout)
-{
-	CRedis* redisObj = GetCRedisObj();
-
-	return redisObj->syncSet(key, value, timeout);
-}
-
-cpp_redis::reply CRedis_TLS::syncGet(const std::string& key)
-{
-	CRedis* redisObj = GetCRedisObj();
-
-	return redisObj->syncGet(key);
-}
-
-CRedis* CRedis_TLS::GetCRedisObj()
-{
-	CRedis* redis = (CRedis*)TlsGetValue(tlsIndex);
-	if (redis == nullptr)
-	{
-		redis = new CRedis;
-
-		redisStack.Push(redis);
-		TlsSetValue(tlsIndex, redis);
-
-		redis->Connect(mIP, mPort);
-	}
-
-
-	return redis;
 }
 
 

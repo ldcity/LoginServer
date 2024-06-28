@@ -1,5 +1,4 @@
-#include "PCH.h"
-#include "Contents/LoginServer.h"
+#include "../PCH.h"
 
 lib::CrashDump crashDump;
 

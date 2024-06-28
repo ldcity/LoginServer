@@ -1,7 +1,7 @@
 #ifndef  __SERIALIZING_PACKET__
 #define  __SERIALIZING_PACKET__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #define _CRT_SECURE_NO_WARNINGS
 

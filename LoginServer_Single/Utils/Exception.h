@@ -2,7 +2,7 @@
 #ifndef __EXCEPTION__
 #define __EXCEPTION__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #include <iostream>
 #include <exception>

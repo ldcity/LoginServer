@@ -1,7 +1,7 @@
 #ifndef __DBCONNECTION_CLASS__
 #define __DBCONNECTION_CLASS__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 class DBConnector
 {

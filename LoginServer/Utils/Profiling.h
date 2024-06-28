@@ -16,18 +16,16 @@
 #define PROFILE_SAMPLE_MAX 50
 #define PROFILE_THREAD_MAX 500
 
-class CSystemLog;
-
 struct PROFILE_DATA
 {
-	long lFlag;						// 프로파일의 사용 여부. (배열시에만)
+	long lFlag;						// 프로파일의 사용 여부. (배열시에만 사용)
 
 	WCHAR szName[64];				// 프로파일 샘플 이름
 
 	LARGE_INTEGER IStartTime;		// 프로파일 샘플 실행 시간
-	__int64 iTotalTime;				// 전체 사용시간 카운터 Time. (출력시 호출횟수로 나누어 평균 구함)
-	__int64 iMin[2];				// 최소 사용시간 카운터 Time. (초단위로 계산하여 저장 / [0] 가장최소 [1] 다음 최소 [2])
-	__int64 iMax[2];				// 최대 사용시간 카운터 Time. (초단위로 계산하여 저장 / [0] 가장최대 [1] 다음최데 [2])
+	__int64 iTotalTime;				// 전체 사용시간 카운터 Time. (평균 값 계산）
+	__int64 iMin[2];				// 최소 사용시간 카운터 Time. (평균 값 제외)
+	__int64 iMax[2];				// 최대 사용시간 카운터 Time. (평균 값 제외)
 
 	__int64 iCall;					// 누적 호출 횟수
 };

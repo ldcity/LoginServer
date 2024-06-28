@@ -1,7 +1,7 @@
 #ifndef __LOGINSERVER__CLASS__
 #define __LOGINSERVER__CLASS__
 
-#include "PCH.h"
+#include "../PCH.h"
 #include <variant>
 
 class LoginServer : public NetServer
@@ -13,6 +13,7 @@ private:
 	enum JobType
 	{
 		MSG_PACKET,				// 패킷
+		REDIS_RES,				// 레디스 결과 이후 로그인 처리
 		TIMEOUT					// 타임아웃
 	};
 
@@ -26,6 +27,28 @@ private:
 		WORD type;
 
 		// 패킷 포인터
+		CPacket* packet;
+	};
+
+	//// Redis Job 구조체
+	//struct RedisJob
+	//{
+	//	// Session 고유 ID
+	//	uint64_t sessionID;
+
+	//	CPacket* packet;
+
+	//	// 비동기 redis 요청 결과를 담은 future 객체
+	//	std::future<cpp_redis::reply> redisFuture;
+	//};
+
+	// Redis Job 구조체
+	struct RedisJob
+	{
+		uint64_t sessionID;				// Session 고유 ID
+		std::string accountNo;
+		std::string sessionKey; // 세션 키 포인터
+
 		CPacket* packet;
 	};
 
@@ -43,17 +66,22 @@ public:
 	void OnError(int errorCode, const wchar_t* msg);
 	void OnTimeout(uint64_t sessionID);
 
+	//bool AsyncLogin(RedisJob* redisJob);
+
 	//--------------------------------------------------------------------------------------
 	// Packet Proc
 	//--------------------------------------------------------------------------------------
 	void PacketProc(uint64_t sessionID, CPacket* packet);
 	void netPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet);
+	void netPacketProc_ResLoginRedis(uint64_t sessionID, CPacket* packet);
 
 	friend unsigned __stdcall JobWorkerThread(PVOID param);					// Job 일 처리 스레드
 	friend unsigned __stdcall MoniteringThread(void* param);
+	friend unsigned __stdcall RedisJobWorkerThread(PVOID param);			// Redis Job 일 처리 스레드
 
 	bool JobWorkerThread_serv();
 	bool MoniterThread_serv();
+	bool RedisJobWorkerThread_serv();
 
 private:
 	Log* loginLog;
@@ -70,9 +98,16 @@ private:
 	HANDLE m_jobHandle;
 	HANDLE m_jobEvent;
 	
+	HANDLE m_redisJobHandle;
+	HANDLE m_redisJobEvent;
+
 	TLSObjectPool<LoginJob> jobPool = TLSObjectPool<LoginJob>(300);
 
-	LockFreeQueue<LoginJob*> loginJobQ = LockFreeQueue<LoginJob*>(20000);
+	LockFreeQueue<LoginJob*> loginJobQ = LockFreeQueue<LoginJob*>(1000);
+
+	TLSObjectPool<RedisJob> redisJobPool = TLSObjectPool<RedisJob>(100);
+
+	LockFreeQueue<RedisJob*> redisJobQ = LockFreeQueue<RedisJob*>(1000);
 
 private:
 	wchar_t chatIP[16];
@@ -103,6 +138,9 @@ private:
 
 	__int64 m_redisSetCnt;
 	__int64 m_redisSetTPS;
+
+	__int64 m_redisJobEnqueueTPS;
+	__int64 m_redisJobThreadUpdateTPS;
 
 	bool startFlag;
 

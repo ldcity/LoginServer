@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "RingBuffer.h"
 
 RingBuffer::RingBuffer() : ringBufferSize(BUFSIZE)

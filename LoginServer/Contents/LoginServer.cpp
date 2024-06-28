@@ -1,6 +1,16 @@
-#include "PCH.h"
-#include "LoginServer.h"
+#include "../PCH.h"
 
+DWORD LoginServer::_DBTlsIdx = TlsAlloc();
+
+// Redis Job Worker Thread
+unsigned __stdcall RedisJobWorkerThread(PVOID param)
+{
+	LoginServer* logServ = (LoginServer*)param;
+
+	logServ->RedisJobWorkerThread_serv();
+
+	return 0;
+}
 
 // Worker Thread Call
 unsigned __stdcall MoniteringThread(void* param)
@@ -19,17 +29,13 @@ LoginServer::LoginServer()
 
 LoginServer::~LoginServer()
 {
-	logger->~Log();
-
-	CloseHandle(m_moniteringThread);
-	CloseHandle(m_moniterEvent);
-	CloseHandle(m_runEvent);
-
-	delete mRedis;
+	LoginServerStop();
 }
 
 bool LoginServer::LoginServerStart()
 {
+	mysql_library_init(0, NULL, NULL); // MySQL 라이브러리 초기화
+
 	loginLog = new Log(L"LoginLog");
 
 	// login server 설정파일을 Parsing하여 읽어옴
@@ -38,29 +44,24 @@ bool LoginServer::LoginServerStart()
 	const wchar_t* txtName = L"LoginServer.txt";
 	loginServerInfoTxt.LoadFile(txtName);
 
-	// DB 관련 변수
-	wchar_t host[16];
-	wchar_t user[64];
-	wchar_t password[64];
-	wchar_t dbName[64];
-	int port;
-
 	loginServerInfoTxt.GetValue(L"DB.HOST", host);
 	loginServerInfoTxt.GetValue(L"DB.USER", user);
 	loginServerInfoTxt.GetValue(L"DB.PASSWORD", password);
 	loginServerInfoTxt.GetValue(L"DB.DBNAME", dbName);
-	loginServerInfoTxt.GetValue(L"DB.PORT", &port);
+	loginServerInfoTxt.GetValue(L"DB.PORT", &dbPort);
 
-	wmemcpy_s(mDBName, 64, dbName, 64);
+	int port;
 
-	// DBConnector_TLS 객체 생성
-	dbConn_TLS = new DBConnector_TLS(host, user, password, dbName, port, true);
+	//// DBConnector_TLS 객체 생성
+	//dbConn_TLS = new DBConnector_TLS(host, user, password, dbName, port, true);
 
 	loginServerInfoTxt.GetValue(L"CHATSERVER.BIND_IP", chatIP);
 	loginServerInfoTxt.GetValue(L"CHATSERVER.BIND_PORT", &chatPort);
 
 	wchar_t ip[20];
+
 	loginServerInfoTxt.GetValue(L"LOGINSERVER.BIND_IP", ip);
+	loginServerInfoTxt.GetValue(L"LOGINSERVER.BIND_PORT", &port);
 
 	m_tempIp = ip;
 	int len = WideCharToMultiByte(CP_UTF8, 0, m_tempIp.c_str(), -1, NULL, 0, NULL, NULL);
@@ -69,9 +70,6 @@ bool LoginServer::LoginServerStart()
 	m_ip = result;
 
 	performMoniter.AddInterface(m_ip);
-
-	port;
-	loginServerInfoTxt.GetValue(L"LOGINSERVER.BIND_PORT", &port);
 
 	int workerThread;
 	loginServerInfoTxt.GetValue(L"LOGINSERVER.IOCP_WORKER_THREAD", &workerThread);
@@ -107,6 +105,12 @@ bool LoginServer::LoginServerStart()
 		return false;
 	}
 
+	// 스레드별 MySQL 초기화
+	for (int i = 0; i < workerThread; ++i)
+	{
+		mysql_thread_init(); // 스레드별 MySQL 초기화
+	}
+
 	// Network Logic Start
 	bool ret = this->Start(ip, port, workerThread, runningThread, nagleOff, zeroCopyOff, sessionMAXCnt, packet_code, packet_key, m_timeout);
 	if (!ret)
@@ -121,7 +125,8 @@ bool LoginServer::LoginServerStart()
 	int redisPort;
 	loginServerInfoTxt.GetValue(L"REDIS.PORT", &redisPort);
 
-	mRedis = new CRedis_TLS(redisIP, redisPort);
+	mRedis = new CRedis;
+	mRedis->Connect(redisIP, redisPort);
 
 	// Create Manual Event
 	m_runEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -143,6 +148,16 @@ bool LoginServer::LoginServerStart()
 		return false;
 	}
 
+	// Create Auto Event
+	m_redisJobEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	if (m_redisJobEvent == NULL)
+	{
+		int eventError = WSAGetLastError();
+		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"CreateEvent() Error : %d", eventError);
+
+		return false;
+	}
+ 
 	// Monitering Thread
 	m_moniteringThread = (HANDLE)_beginthreadex(NULL, 0, MoniteringThread, this, CREATE_SUSPENDED, NULL);
 	if (m_moniteringThread == NULL)
@@ -153,13 +168,46 @@ bool LoginServer::LoginServerStart()
 		return false;
 	}
 
+	// Redis Job Worker Thread
+	m_redisJobHandle = (HANDLE)_beginthreadex(NULL, 0, RedisJobWorkerThread, this, 0, NULL);
+	if (m_redisJobHandle == NULL)
+	{
+		int threadError = GetLastError();
+		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"_beginthreadex() Error : %d", threadError);
+
+		return false;
+	}
+
 	WaitForSingleObject(m_moniteringThread, INFINITE);
+	WaitForSingleObject(m_redisJobHandle, INFINITE);
 
 	return true;
 }
 
 bool LoginServer::LoginServerStop()
 {
+	loginLog->~Log();
+	logger->~Log();
+
+	DBConnector* dbConn;
+
+	// 리소스 정리 작업을 위해 필요한 LockFreeStack에서 DBConnector 객체 pop
+	while (tlsDBObjects.Pop(&dbConn))
+		delete dbConn;
+
+	TlsFree(_DBTlsIdx);
+
+	delete mRedis;
+
+	CloseHandle(m_moniteringThread);
+	CloseHandle(m_moniterEvent);
+	CloseHandle(m_runEvent);
+
+	CloseHandle(m_redisJobEvent);
+	CloseHandle(m_redisJobHandle);
+
+	mysql_library_end(); // MySQL 라이브러리 종료
+
 	return true;
 }
 
@@ -185,8 +233,8 @@ bool LoginServer::MoniterThread_serv()
 
 			__int64 packetPoolCapacity = CPacket::GetPoolCapacity();
 			__int64 packetPoolUseCnt = CPacket::GetPoolUseCnt();
-			__int64 packetPoolAllocCnt = CPacket::GetPoolUseCnt();
-			__int64 packetPoolFreeCnt = CPacket::GetPoolUseCnt();
+			__int64 packetPoolAllocCnt = CPacket::GetPoolTotalAllocCnt();
+			__int64 packetPoolFreeCnt = CPacket::GetPoolTotalFreeCnt();
 
 			wprintf(L"------------------------[Moniter]----------------------------\n");
 			performMoniter.PrintMonitorData();
@@ -204,8 +252,10 @@ bool LoginServer::MoniterThread_serv()
 			wprintf(L"[Pending TPS          ] Recv     : %10I64d    Send: %10I64d\n", InterlockedExchange64(&recvPendingTPS, 0), InterlockedExchange64(&sendPendingTPS, 0));
 			wprintf(L"------------------------[Contents]----------------------------\n");
 			wprintf(L"[Update               ] Total    : %10I64d    TPS        : %10I64d\n", m_updateTotal, InterlockedExchange64(&m_updateTPS, 0));
-			wprintf(L"[Redis Set            ] Total    : %10I64d   TPS        : %10I64d\n", m_redisSetCnt, InterlockedExchange64(&m_redisSetTPS, 0));
-			wprintf(L"[Packet Pool          ] Capacity : %10llu    Use        : %10llu    Alloc : %10llu    Free : %10llu\n",
+			wprintf(L"[RedisQ               ] Size     : %10I64d\n", redisJobQ.GetSize());
+			wprintf(L"[Redis Job Pool       ] Capacity : %10llu     Use        : %10llu    Alloc : %10llu    Free : %10llu\n",
+				redisJobPool.GetCapacity(), redisJobPool.GetObjectUseCount(), redisJobPool.GetObjectAllocCount(), redisJobPool.GetObjectFreeCount());
+			wprintf(L"[Packet Pool          ] Capacity : %10llu     Use        : %10llu    Alloc : %10llu    Free : %10llu\n",
 				packetPoolCapacity, packetPoolUseCnt, packetPoolAllocCnt, packetPoolFreeCnt);
 			wprintf(L"[Login Packet         ] Total    : %10I64d    TPS        : %10I64d \n",
 				m_loginCount, InterlockedExchange64(&m_loginTPS, 0));
@@ -215,6 +265,8 @@ bool LoginServer::MoniterThread_serv()
 				m_loginFailCount, InterlockedExchange64(&m_loginFailTPS, 0));
 			wprintf(L"[DB                   ] Total    : %10I64d    TPS        : %10I64d\n",
 				m_dbQueryTotal, InterlockedExchange64(&m_dbQueryTPS, 0));
+			wprintf(L"[Redis Update         ] Enqueue  : %10I64d    TPS         : %10I64d\n", InterlockedExchange64(&m_redisJobEnqueueTPS, 0), InterlockedExchange64(&m_redisJobThreadUpdateTPS, 0));
+			wprintf(L"[Redis Set            ] Total    : %10I64d    TPS         : %10I64d\n", m_redisSetCnt, InterlockedExchange64(&m_redisSetTPS, 0));
 			wprintf(L"==============================================================\n\n");
 
 			// 모니터링 서버로 데이터 전송
@@ -262,6 +314,47 @@ bool LoginServer::MoniterThread_serv()
 	return true;
 }
 
+bool LoginServer::RedisJobWorkerThread_serv()
+{
+	DWORD threadID = GetCurrentThreadId();
+
+	while (true)
+	{
+		// JobQ에 Job이 삽입되면 이벤트 발생하여 깨어남
+		WaitForSingleObject(m_redisJobEvent, INFINITE);
+
+		RedisJob* redisJob = nullptr;
+
+		// Job이 없을 때까지 update 반복
+		while (redisJobQ.GetSize() > 0)
+		{
+			if (redisJobQ.Dequeue(redisJob))
+			{
+				// 비동기 redis set요청
+				mRedis->asyncSet(redisJob->accountNo, redisJob->sessionKey, 30, [=](const cpp_redis::reply& reply) {
+
+					// redis set 완료 콜백
+					if (reply.is_string() && reply.as_string() == "OK")
+					{
+						// 비동기 요청이 성공하면 이후 로그인 응답 처리에 대한 일감을 PQCS로 던짐
+						JobPQCS(redisJob->sessionID, redisJob->packet);
+
+						// JobPool에 Job 객체 반환
+						redisJobPool.Free(redisJob);
+
+						InterlockedIncrement64(&m_redisJobThreadUpdateTPS);
+					}
+					else
+					{
+						// 실패 처리
+						loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Redis Set failed for accountNo : %IId", redisJob->accountNo);
+						CRASH();
+					}
+				});
+			}
+		}
+	}
+}
 
 bool LoginServer::OnConnectionRequest(const wchar_t* IP, unsigned short PORT)
 {
@@ -283,6 +376,7 @@ void LoginServer::OnClientLeave(uint64_t sessionID)
 {
 
 }
+
 void LoginServer::OnRecv(uint64_t sessionID, CPacket* packet)
 {
 	WORD type = 0;
@@ -290,6 +384,17 @@ void LoginServer::OnRecv(uint64_t sessionID, CPacket* packet)
 
 	// Packet Handler 호출
 	PacketProc(sessionID, packet, type);
+
+	if (packet != nullptr)
+		CPacket::Free(packet);
+
+	InterlockedIncrement64(&m_updateTotal);
+	InterlockedIncrement64(&m_updateTPS);
+}
+
+void LoginServer::OnJob(uint64_t sessionID, CPacket* packet)
+{
+	netPacketProc_ResLoginRedis(sessionID, packet);
 
 	if (packet != nullptr)
 		CPacket::Free(packet);
@@ -322,11 +427,8 @@ void LoginServer::PacketProc(uint64_t sessionID, CPacket* packet, WORD type)
 		break;
 
 	case en_PACKET_ON_TIMEOUT:
-	{
 		// 세션 타임아웃
-		loginLog->logger(dfLOG_LEVEL_DEBUG, __LINE__, L"Timeout sessionID : %I64d", sessionID);
 		DisconnectSession(sessionID);
-	}
 	break;
 
 	default:
@@ -387,6 +489,16 @@ void LoginServer::netPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet)
 		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Login Request Packet # sessionKey is null");
 		DisconnectSession(sessionID);
 		return;
+	}
+
+	DBConnector* dbConn_TLS = (DBConnector*)TlsGetValue(this->_DBTlsIdx);
+	if (dbConn_TLS == nullptr)
+	{
+		dbConn_TLS = new DBConnector(host, user, password, dbName, dbPort, true);
+		dbConn_TLS->Open();
+
+		TlsSetValue(this->_DBTlsIdx, dbConn_TLS);
+		tlsDBObjects.Push(dbConn_TLS);
 	}
 
 	// ---------------------------------------------------------------------
@@ -552,35 +664,62 @@ void LoginServer::netPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet)
 	std::string sessionKeyStr;
 	sessionKeyStr.assign(sessionKey);
 
-	// redis에 인증 토큰 저장 (30초 후에 토큰 만료)
-	if (!mRedis->syncSet(accountNoStr, sessionKeyStr, 30))
-	{
-		// redis set 실패 시 동작
-
-		status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_NONE;
-
-		CPacket* resLoginPacket = CPacket::Alloc();
-
-		mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
-
-		SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
-
-		CPacket::Free(resLoginPacket);
-	}
-
-	InterlockedIncrement64(&m_redisSetCnt);
-	InterlockedIncrement64(&m_redisSetTPS);
-
-	// account table에 있는 정보이므로 로그인 성공 & 인증 성공
-	InterlockedIncrement64(&m_loginSuccessCount);
-	InterlockedIncrement64(&m_loginSuccessTPS);
-
 	CPacket* resLoginPacket = CPacket::Alloc();
 
 	mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
 
-	// 응답을 보낸 뒤, 100ms 뒤에 로그인 서버와의 연결을 끊음
-	SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
+	RedisJob* job = redisJobPool.Alloc();
+	job->sessionID = sessionID;
+	job->accountNo = accountNoStr;
+	job->sessionKey = sessionKeyStr;
+	job->packet = resLoginPacket;
 
-	CPacket::Free(resLoginPacket);
+	redisJobQ.Enqueue(job);
+	SetEvent(m_redisJobEvent);
+	InterlockedIncrement64(&m_redisJobEnqueueTPS);
+
+	//// redis에 인증 토큰 저장 (30초 후에 토큰 만료)
+	//if (!mRedis->syncSet(accountNoStr, sessionKeyStr, 30))
+	//{
+	//	// redis set 실패 시 동작
+	//	status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_NONE;
+
+	//	CPacket* resLoginPacket = CPacket::Alloc();
+
+	//	mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
+
+	//	SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
+
+	//	CPacket::Free(resLoginPacket);
+	//}
+
+	//InterlockedIncrement64(&m_redisSetCnt);
+	//InterlockedIncrement64(&m_redisSetTPS);
+
+	//// account table에 있는 정보이므로 로그인 성공 & 인증 성공
+	//InterlockedIncrement64(&m_loginSuccessCount);
+	//InterlockedIncrement64(&m_loginSuccessTPS);
+
+	//CPacket* resLoginPacket = CPacket::Alloc();
+
+	//mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
+
+	//// 응답을 보낸 뒤, 100ms 뒤에 로그인 서버와의 연결을 끊음
+	//SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
+
+	//CPacket::Free(resLoginPacket);
+}
+
+// 비동기 redis 요청 결과를 얻은 뒤, 이후 로그인 job 처리
+void LoginServer::netPacketProc_ResLoginRedis(uint64_t sessionID, CPacket* packet)
+{
+	// account table에 있는 정보이므로 로그인 성공 & 인증 성공
+	InterlockedIncrement64(&m_loginSuccessCount);
+	InterlockedIncrement64(&m_loginSuccessTPS);
+
+	//// 응답을 보낸 뒤, 100ms 뒤에 로그인 서버와의 연결을 끊음
+	//SendPacketAndDisconnect(sessionID, packet, 100);
+
+	// 로그인 응답
+	SendPacket(sessionID, packet);
 }

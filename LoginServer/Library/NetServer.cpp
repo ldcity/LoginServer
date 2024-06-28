@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "../PCH.h"
 #include "NetServer.h"
 
 // ========================================================================
@@ -438,6 +438,12 @@ bool NetServer::WorkerThread_serv()
 		{
 			completionOK = SendProc(pSession, cbTransferred);
 		}
+		// 컨텐츠 로직에서 PQCS로 job 요청
+		else if (cbTransferred == PQCSJobType && pOverlapped != nullptr)
+		{
+			CPacket* packet = (CPacket*)pOverlapped;
+			OnJob(pSession->sessionID, packet);
+		}
 
 		// I/O 완료 통지가 더이상 없다면 세션 해제 작업
 		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
@@ -626,14 +632,6 @@ bool NetServer::SendProc(stSESSION* pSession, long cbTransferred)
 			}
 		}
 	}
-
-	//// disconn flag가 올라가 있다면 disconnect
-	//if (pSession->sendDisconnFlag)
-	//{
-	//	DisconnectSession(pSession->sessionID);
-
-	//	InterlockedExchange8((char*)&pSession->sendDisconnFlag, false);
-	//}
 
 	return true;
 }
@@ -987,6 +985,72 @@ bool NetServer::SendPacketAndDisconnect(uint64_t sessionID, CPacket* packet, DWO
 	}
 }
 
+// 외부에서 job 요청
+void NetServer::JobPQCS(uint64_t sessionID, CPacket* packet)
+{
+	// find session할 때도 io 참조카운트 증가시켜서 보장받아야함	
+	// index 찾기 -> out of indexing 예외 처리
+	int index = GetSessionIndex(sessionID);
+	if (index < 0 || index >= mMaxAcceptCount)
+	{
+		return;
+	}
+
+	stSESSION* pSession = &SessionArray[index];
+
+	if (pSession == nullptr)
+	{
+		return;
+	}
+
+	// 세션 사용 참조카운트 증가 & Release 중인지 동시 확인
+	// Release 비트값이 1이면 ReleaseSession 함수에서 ioCount = 0, releaseFlag = 1 인 상태
+	// -> 이 사이에 Release 함수에서 ioCount도 0인걸 확인한 상태임 (decrement 안해도 됨)
+	if ((InterlockedIncrement64(&pSession->ioRefCount) & RELEASEMASKING))
+	{
+		return;
+	}
+
+	// ------------------------------------------------------------------------------------
+	// Release 수행 없이 이곳에서만 세션 사용하려는 상태
+
+	// 내 세션이 맞는지 다시 확인 (다른 곳에서 세션 해제 & 할당되어, 다른 세션이 됐을 수도 있음)
+	// 내 세션이 아닐 경우, 이전에 증가했던 ioCount를 되돌려야 함 (되돌리지 않으면 재할당 세션의 io가 0이 될 수가 없음)
+	if (sessionID != pSession->sessionID)
+	{
+		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		{
+			ReleasePQCS(pSession);
+		}
+
+		return;
+	}
+
+	// 외부에서 disconnect 하는 상태
+	if (pSession->isDisconnected)
+	{
+		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		{
+			ReleasePQCS(pSession);
+		}
+
+		return;
+	}
+
+	// Enqueue한 패킷을 다른 곳에서 사용하므로 패킷 참조카운트 증가 -> Dequeue할 때 감소
+	InterlockedIncrement64(&pSession->ioRefCount);
+
+	// 외부에서 처리할 job pqcs 요청
+	PostQueuedCompletionStatus(IOCPHandle, PQCSJobType, (ULONG_PTR)pSession, (LPOVERLAPPED)packet);
+	
+	if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+	{
+		ReleasePQCS(pSession);
+
+		return;
+	}
+}
+
 bool NetServer::SendPacket(uint64_t sessionID, CPacket* packet)
 {
 	// find session할 때도 io 참조카운트 증가시켜서 보장받아야함	
@@ -1099,8 +1163,6 @@ void NetServer::ReleaseSession(stSESSION* pSession)
 	closesocket(sock);
 
 	InterlockedExchange8((char*)&pSession->sendFlag, false);
-
-	Sleep(0);
 
 	// Send Packet 관련 리소스 정리
 	// SendQ에서 Dqeueue하여 SendPacket 배열에 넣었지만 아직 WSASend 못해서 남아있는 패킷 정리

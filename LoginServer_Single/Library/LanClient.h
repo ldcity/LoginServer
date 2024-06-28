@@ -1,7 +1,7 @@
 #ifndef __LanClient_CLASS__
 #define __LanClient_CLASS__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 // 내부 서버간 통신 모듈 클래스
 class LanClient

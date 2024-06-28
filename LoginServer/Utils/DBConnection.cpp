@@ -1,7 +1,10 @@
-#include "PCH.h"
+#include "../PCH.h"
 
 DBConnector::DBConnector(const wchar_t* host, const wchar_t* user, const wchar_t* password, const wchar_t* db, unsigned short port, bool sslOff) : connection(NULL), mFlag(0), mQueryTime(0)
 {
+	// 초기화
+	mysql_init(&conn);
+
 	wmemcpy_s(mHost, SHORT_LEN, host, wcslen(host));
 	wmemcpy_s(mUser, MIDDLE_LEN, user, wcslen(user));
 	wmemcpy_s(mPassword, MIDDLE_LEN, password, wcslen(password));
@@ -19,8 +22,6 @@ DBConnector::~DBConnector()
 
 bool DBConnector::Open()
 {
-	// 초기화
-	mysql_init(&conn);
 
 	// SSL 모드를 비활성화
 	// 성능 개선의 이유로 해당 옵션 설정
@@ -31,13 +32,6 @@ bool DBConnector::Open()
 	{
 		mysql_options(&conn, MYSQL_OPT_SSL_MODE, &mFlag);
 	}
-
-
-
-	std::string host;
-	std::string user;
-	std::string pwd;
-	std::string db;
 
 	WideCharToMultiByte(CP_UTF8, 0, mHost, -1, mHostUTF8, SHORT_LEN, NULL, NULL);
 	WideCharToMultiByte(CP_UTF8, 0, mUser, -1, mUserUTF8, MIDDLE_LEN, NULL, NULL);
@@ -62,7 +56,7 @@ bool DBConnector::Open()
 
 			// 재연결 시도
 			connection = mysql_real_connect(&conn, mHostUTF8, mUserUTF8, mPasswordUTF8, mDBUTF8, mPort, (char*)NULL, 0);
-			
+
 			tryCnt++;
 			Sleep(500);
 		}

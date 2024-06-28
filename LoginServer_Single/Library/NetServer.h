@@ -2,7 +2,7 @@
 #ifndef __NETSERVER_CLASS__
 #define __NETSERVER_CLASS__
 
-#include "PCH.h"
+#include "../PCH.h"
 
 #define MAX_SESSION 500
 
@@ -116,11 +116,13 @@ private:
 		return (uint64_t)(sessionID >> SESSION_ID_BITS);
 	}
 
-	// 타임아웃 주기 : 현재 시간 ~ 서버의 타임아웃 시간 (ms 단위)
-	void SetTimeout(stSESSION* session)
-	{
-		InterlockedExchange(&session->Timer, timeGetTime() + mTimeout);
-	}
+	//// 타임아웃 주기 : 현재 시간 ~ 서버의 타임아웃 시간 (ms 단위)
+	//void SetTimeout(stSESSION* session)
+	//{
+	//	InterlockedExchange(&session->Timer, timeGetTime() + mTimeout);
+	//}
+
+	void SetTimeout(stSESSION* session);
 
 	// 타임아웃 주기 : 현재 시간 ~ 매개변수로 받은 타임아웃 시간 (ms 단위)
 	inline void SetTimeout(stSESSION* session, DWORD timeout)
