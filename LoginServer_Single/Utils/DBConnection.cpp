@@ -13,11 +13,14 @@ DBConnector::DBConnector(const wchar_t* host, const wchar_t* user, const wchar_t
 
 	if (sslOff)
 		mFlag = SSL_MODE_DISABLED;
+
+	dbLog = new Log(L"DBLog.txt");
 }
 
 
 DBConnector::~DBConnector()
 {
+	delete dbLog;
 }
 
 bool DBConnector::Open()
@@ -63,7 +66,8 @@ bool DBConnector::Open()
 		return false;
 	}
 
-	mysql_set_character_set(connection, "utf8");
+	mysql_set_character_set(connection, "utf8mb4");
+
 
 	return true;
 }
@@ -95,6 +99,50 @@ bool DBConnector::Commit()
 	}
 
 	return true;
+}
+
+// 매개변수화된 쿼리 실행 - 벡터 버전
+bool DBConnector::ExecuteQuery(const std::wstring& query, std::vector<MYSQL_BIND>& bindParams, std::function<bool(MYSQL_STMT*, Log* dbLog)> resultHandler)
+{
+	MYSQL_STMT* stmt = mysql_stmt_init(connection);
+	if (!stmt)
+	{
+		dbLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"[DB] Coult not initialize statement");
+		return false;
+	}
+
+	std::string utf8Query(query.begin(), query.end());
+	if (mysql_stmt_prepare(stmt, utf8Query.c_str(), utf8Query.size()))
+	{
+		std::cout << mysql_stmt_error(stmt) << std::endl;
+		dbLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"[DB] Statement preparation failed : %s", mysql_stmt_error(stmt));
+		mysql_stmt_close(stmt);
+		return false;
+	}
+
+	if (!bindParams.empty() && mysql_stmt_bind_param(stmt, bindParams.data()))
+	{
+		dbLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"[DB] Parameter binding failed : %s", mysql_stmt_error(stmt));
+		mysql_stmt_close(stmt);
+		return false;
+	}
+
+	if (mysql_stmt_execute(stmt))
+	{
+		std::cout << mysql_stmt_error(stmt) << std::endl;
+		dbLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"[DB] Query execution failed : %s", mysql_stmt_error(stmt));
+		mysql_stmt_close(stmt);
+		return false;
+	}
+
+	bool isSuccessful = true;
+
+	if (resultHandler)
+		isSuccessful = resultHandler(stmt, dbLog);
+
+	mysql_stmt_close(stmt);
+
+	return isSuccessful;
 }
 
 int DBConnector::Query(const wchar_t* strFormat, ...)

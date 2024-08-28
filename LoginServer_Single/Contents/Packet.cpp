@@ -8,8 +8,8 @@ void mpResLogin(CPacket* packet, INT64 accountNo, BYTE status, WCHAR* id, WCHAR*
 
 	*packet << type << accountNo << status;
 
-	packet->PutData((char*)id, ID_MAX_LEN * sizeof(wchar_t));
-	packet->PutData((char*)nickname, NICKNAME_MAX_LEN * sizeof(wchar_t));
+	packet->PutData((char*)id, IDMAXLEN * sizeof(wchar_t));
+	packet->PutData((char*)nickname, NICKNAMEMAXLEN * sizeof(wchar_t));
 
 	packet->PutData((char*)gameServerIP, GAMESERVERIP * sizeof(wchar_t));
 	*packet << gameServerPort;

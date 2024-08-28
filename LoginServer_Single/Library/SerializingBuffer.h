@@ -371,7 +371,7 @@ public:
 		if (m_iDataSize < iSize)
 			throw SerializingBufferException("Failed to read float", "GetData", __LINE__, this->GetBufferPtr());
 
-		memcpy_s(chpDest, iSize, lanHeaderPtr, iSize);
+		memcpy_s(chpDest, iSize, LanHeaderPtr, iSize);
 
 		return iSize;
 	}
@@ -441,7 +441,7 @@ public:
 	// Lan 헤더 포인터
 	inline char* GetLanBufferPtr(void)
 	{
-		return lanHeaderPtr;
+		return LanHeaderPtr;
 	}
 
 	// 실제 페이로드 데이터 크기
@@ -471,10 +471,10 @@ public:
 	// 헤더 셋팅 (Lan)
 	inline void SetLanHeader()
 	{
-		LANHeader lanHeader;
-		lanHeader.len = GetDataSize();
+		LanHeader LanHeader;
+		LanHeader.len = GetDataSize();
 
-		memcpy_s(lanHeaderPtr, sizeof(LANHeader), &lanHeader, sizeof(LANHeader));
+		memcpy_s(LanHeaderPtr, sizeof(LanHeader), &LanHeader, sizeof(LanHeader));
 	}
 
 	// 헤더 셋팅 & 인코딩 (Net)
@@ -575,7 +575,7 @@ private:
 	char* m_chpBuffer;
 
 	// lan header ptr
-	char* lanHeaderPtr;
+	char* LanHeaderPtr;
 
 	// 읽기 위치
 	char* readPos;

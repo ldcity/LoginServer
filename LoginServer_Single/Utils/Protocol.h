@@ -146,7 +146,7 @@ enum en_PACKET_TYPE
 	//		WORD	Type
 	//
 	//		INT64	AccountNo
-	//		BYTE	Status				// 0 (세션오류) / 1 (성공) ...  하단 defines 사용
+	//		BYTE	Status				// 0 (세션오류) / 1 (성공) / 2 (table에 계정 정보 없음)
 	//
 	//		WCHAR	ID[20]				// 사용자 ID		. null 포함
 	//		WCHAR	Nickname[20]		// 사용자 닉네임	. null 포함

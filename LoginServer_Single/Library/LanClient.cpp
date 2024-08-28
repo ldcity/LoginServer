@@ -272,7 +272,7 @@ bool LanClient::LanWorkerThread_serv()
 		}
 
 		// I/O 완료 통지가 더이상 없다면 세션 해제 작업
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 		{
 			ReleaseSession();
 		}
@@ -291,14 +291,14 @@ bool LanClient::RecvProc(long cbTransferred)
 	// Recv Message Process
 	while (useSize > 0)
 	{
-		LANHeader header;
+		LanHeader header;
 
 		// Header 크기만큼 있는지 확인
-		if (useSize <= sizeof(LANHeader))
+		if (useSize <= sizeof(LanHeader))
 			break;
 
 		// Header Peek
-		mSession.recvRingBuffer.Peek((char*)&header, sizeof(LANHeader));
+		mSession.recvRingBuffer.Peek((char*)&header, sizeof(LanHeader));
 
 		// Len 확인 (페이로드 길이 확인)
 		if (header.len <= 0 || header.len > CPacket::en_PACKET::eBUFFER_DEFAULT)
@@ -309,7 +309,7 @@ bool LanClient::RecvProc(long cbTransferred)
 		}
 
 		// Packet 크기만큼 있는지 확인
-		if (useSize < sizeof(LANHeader) + header.len)
+		if (useSize < sizeof(LanHeader) + header.len)
 		{
 			//// 패킷 길이가 남은 링버퍼 사이즈보다 크면 안됨
 			//if (header.len > mSession.recvRingBuffer.GetFreeSize())
@@ -535,7 +535,7 @@ bool LanClient::SendPost()
 	int deqIdx = 0;
 
 	// 링버퍼 등록
-	WSABUF wsa[MAX_WSA_BUF] = { 0 };
+	WSABUF wsa[MAXWSABUF] = { 0 };
 
 	int totalSendSize = 0;
 
@@ -551,7 +551,7 @@ bool LanClient::SendPost()
 
 		deqIdx++;
 
-		if (deqIdx >= MAX_WSA_BUF)
+		if (deqIdx >= MAXWSABUF)
 			break;
 	}
 

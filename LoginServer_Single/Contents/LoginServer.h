@@ -12,40 +12,45 @@ private:
 	//--------------------------------------------------------------------------------------
 	enum JobType
 	{
-		MSG_PACKET,				// 패킷
-		REDIS_RES,				// 레디스 결과 이후 로그인 처리
-		TIMEOUT					// 타임아웃
+		MSG_PACKET,		// 수신된 패킷 처리
+		JOB_PACKET,		// 컨텐츠에서 요청한 작업
+		DB_FAIL,		// DB 실패 응답
+		//DB_SELECT,		// Select 쿼리 요청
+		//DB_UPDATE,		// Update 쿼리 요청
+		TIMEOUT			// 타임아웃
+	};
+
+	enum ErrorCode
+	{
+		REDISSETERROR
 	};
 
 	// Job 구조체
 	struct LoginJob
 	{
-		// Session 고유 ID
+		// Session ID
 		uint64_t sessionID;
 
-		// Job Type (새 접속, 패킷 메시지, 접속 해제 등)
+		// Job Type
 		WORD type;
 
 		// 패킷 포인터
 		CPacket* packet;
 	};
 
-	//// Redis Job 구조체
-	//struct RedisJob
+	//// DB Job 구조체
+	//struct DBJob
 	//{
-	//	// Session 고유 ID
+	//	WORD type;
 	//	uint64_t sessionID;
-
-	//	CPacket* packet;
-
-	//	// 비동기 redis 요청 결과를 담은 future 객체
-	//	std::future<cpp_redis::reply> redisFuture;
+	//	__int64 accountNo;
+	//	char sessionKey[65];
 	//};
 
 	// Redis Job 구조체
 	struct RedisJob
 	{
-		uint64_t sessionID;				// Session 고유 ID
+		uint64_t sessionID;			// Session 고유 ID
 		std::string accountNo;
 		std::string sessionKey; // 세션 키 포인터
 
@@ -73,14 +78,18 @@ public:
 	//--------------------------------------------------------------------------------------
 	void PacketProc(uint64_t sessionID, CPacket* packet);
 	void netPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet);
-	void netPacketProc_ResLoginRedis(uint64_t sessionID, CPacket* packet);
+	void netPacketProc_ResLogin(uint64_t sessionID, CPacket* packet);
 
-	friend unsigned __stdcall JobWorkerThread(PVOID param);					// Job 일 처리 스레드
+	void RedisProc(RedisJob* redisJob);
+
 	friend unsigned __stdcall MoniteringThread(void* param);
+	friend unsigned __stdcall JobWorkerThread(PVOID param);					// Job 일 처리 스레드
+	//friend unsigned __stdcall DBJobWorkerThread(PVOID param);			// Redis Job 일 처리 스레드
 	friend unsigned __stdcall RedisJobWorkerThread(PVOID param);			// Redis Job 일 처리 스레드
 
-	bool JobWorkerThread_serv();
 	bool MoniterThread_serv();
+	bool JobWorkerThread_serv();
+	//bool DBJobWorkerThread_serv();
 	bool RedisJobWorkerThread_serv();
 
 private:
@@ -97,17 +106,24 @@ private:
 
 	HANDLE m_jobHandle;
 	HANDLE m_jobEvent;
-	
+
+	//HANDLE m_dbJobHandle;
+	//HANDLE m_dbJobEvent;
+
 	HANDLE m_redisJobHandle;
 	HANDLE m_redisJobEvent;
 
 	TLSObjectPool<LoginJob> jobPool = TLSObjectPool<LoginJob>(300);
+	LockFreeQueue<LoginJob*> jobQ = LockFreeQueue<LoginJob*>(500);
 
-	LockFreeQueue<LoginJob*> loginJobQ = LockFreeQueue<LoginJob*>(1000);
+	//TLSObjectPool<DBJob> dbJobPool = TLSObjectPool<DBJob>(300);
+	//LockFreeQueue<DBJob*> dbJobQ = LockFreeQueue<DBJob*>(500);
 
 	TLSObjectPool<RedisJob> redisJobPool = TLSObjectPool<RedisJob>(100);
+	LockFreeQueue<RedisJob*> redisJobQ = LockFreeQueue<RedisJob*>(200);
 
-	LockFreeQueue<RedisJob*> redisJobQ = LockFreeQueue<RedisJob*>(1000);
+	//TLSObjectPool<RedisJob> redisJobPool = TLSObjectPool<RedisJob>(0);
+	//LockFreeQueue<RedisJob*> redisJobQ = LockFreeQueue<RedisJob*>(0);
 
 private:
 	wchar_t chatIP[16];
@@ -136,10 +152,7 @@ private:
 	__int64 m_jobUpdatecnt;													// job 개수
 	__int64 m_jobThreadUpdateCnt;											// job thread update 횟수
 
-	__int64 m_redisSetCnt;
-	__int64 m_redisSetTPS;
-
-	__int64 m_redisJobEnqueueTPS;
+	__int64 m_loginResJobUpdateTPS;
 	__int64 m_redisJobThreadUpdateTPS;
 
 	bool startFlag;

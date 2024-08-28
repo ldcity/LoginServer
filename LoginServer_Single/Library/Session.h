@@ -4,9 +4,6 @@
 
 #include "../PCH.h"
 
-#define MAX_WSA_BUF 200
-#define RELEASEMASKING 0x80000000				// ioRefCount에서 ReleaseFlag만 뽑아냄
-
 const char SESSION_ID_BITS = 47;
 const __int64 SESSION_INDEX_MASK = 0x00007FFFFFFFFFFF;
 
@@ -20,18 +17,18 @@ struct stSESSION
 	wchar_t IP_str[20];											// String IP
 	unsigned short PORT;										// PORT
 
-	DWORD Timeout;												// Last Recv Time
-	DWORD Timer;												// Timeout Timer
+	DWORD Timeout;												// Last Recv Time (타임아웃 주기)
+	DWORD Timer;												// Timeout Timer (타임아웃 시간 설정)
 
 	OVERLAPPED m_stRecvOverlapped;								// Recv Overlapped I/O Struct
 	OVERLAPPED m_stSendOverlapped;								// Send Overlapped I/O Struct
 
 	RingBuffer recvRingBuffer;									// Recv RingBuffer
-	CPacket* SendPackets[MAX_WSA_BUF] = { nullptr };			// Send Packets 배열
+	CPacket* SendPackets[MAXWSABUF] = { nullptr };			// Send Packets 배열
 	LockFreeQueue<CPacket*> sendQ;								// Send LockFreeQueue
 
 	alignas(64) int sendPacketCount;							// WSABUF Count
-	alignas(64) __int64 ioRefCount;								// I/O Count & Session Ref Count
+	alignas(32) DWORD ioRefCount;								// I/O Count & Session Ref Count
 	alignas(64) bool sendFlag;									// Sending Message Check
 	alignas(64) bool isDisconnected;							// Session Disconnected
 	alignas(64) bool sendDisconnFlag;
@@ -83,7 +80,7 @@ struct stLanSESSION
 	RingBuffer recvRingBuffer;									// Recv RingBuffer
 	LockFreeQueue<CPacket*> sendQ;								// Send LockFreeQueue
 
-	CPacket* SendPackets[MAX_WSA_BUF] = { nullptr };			// Send Packets 배열
+	CPacket* SendPackets[MAXWSABUF] = { nullptr };			// Send Packets 배열
 
 	alignas(64) int sendPacketCount;							// WSABUF Count
 	alignas(64) __int64 ioRefCount;								// I/O Count & Session Ref Count

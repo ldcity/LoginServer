@@ -1,5 +1,4 @@
 #include "../PCH.h"
-#include "NetServer.h"
 
 // ========================================================================
 // Thread Call
@@ -301,12 +300,9 @@ bool NetServer::AcceptThread_serv()
 		// -> accept 단계에서 소켓 얻은 후, 세션 사용을 할 때, refcount가 0이 되는 걸 방지
 		// increment가 아니라 exchange하는 이유 
 		// -> 이전에 사용했던 세션이면 release하면서 남아있던 release flag 잔재 지우기 위해
-		InterlockedExchange64(&session->ioRefCount, 1);
+		InterlockedExchange(&session->ioRefCount, 1);
 
 		session->sessionID = CreateSessionID(++s_sessionUniqueID, index);
-
-		SetTimeout(session);
-
 
 		__int64 id = session->sessionID;
 
@@ -327,6 +323,8 @@ bool NetServer::AcceptThread_serv()
 		// 종료flag 셋팅
 		InterlockedExchange8((char*)&session->isDisconnected, false);
 		InterlockedExchange8((char*)&session->sendDisconnFlag, false);
+
+		SetTimeout(session);
 
 		// IOCP와 소켓 연결
 		// 세션 주소값이 키 값
@@ -357,7 +355,7 @@ bool NetServer::AcceptThread_serv()
 		RecvPost(session);
 
 		// accept에서 올린 참조카운트 감소
-		if (0 == InterlockedDecrement64(&session->ioRefCount))
+		if (0 == InterlockedDecrement(&session->ioRefCount))
 		{
 			ReleaseSession(session);
 		}
@@ -440,7 +438,7 @@ bool NetServer::WorkerThread_serv()
 		}
 
 		// I/O 완료 통지가 더이상 없다면 세션 해제 작업
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 		{
 			ReleaseSession(pSession);
 		}
@@ -481,7 +479,7 @@ bool NetServer::TimeoutThread_serv()
 
 			// ----------------------------------------------------------------------
 			// 이곳에 진입한 세션들은 타임아웃 시켜줘야 함
-			//OnTimeout(sessionID);		// Contents 서버에서 타임아웃 관련 logic 처리
+			OnTimeout(sessionID);				// Contents 서버에서 타임아웃 관련 logic 처리
 
 			// 타임아웃 예약 종료 건이라면 flag 다시 되돌려줌
 			if (SessionArray[i].sendDisconnFlag == true)
@@ -492,12 +490,6 @@ bool NetServer::TimeoutThread_serv()
 	}
 
 	return true;
-}
-
-// 타임아웃 주기 : 현재 시간 ~ 서버의 타임아웃 시간 (ms 단위)
-void NetServer::SetTimeout(stSESSION * session)
-{
-	InterlockedExchange(&session->Timer, timeGetTime() + mTimeout);
 }
 
 bool NetServer::RecvProc(stSESSION* pSession, long cbTransferred)
@@ -515,14 +507,14 @@ bool NetServer::RecvProc(stSESSION* pSession, long cbTransferred)
 	// Recv Message Process
 	while (useSize > 0)
 	{
-		NetHeader header;
+		WanHeader header;
 
 		// Header 크기만큼 있는지 확인
-		if (useSize <= sizeof(NetHeader))
+		if (useSize <= sizeof(WanHeader))
 			break;
 
 		// Header Peek
-		pSession->recvRingBuffer.Peek((char*)&header, sizeof(NetHeader));
+		pSession->recvRingBuffer.Peek((char*)&header, sizeof(WanHeader));
 
 		// packet code 확인
 		if (header.code != CPacket::GetCode())
@@ -533,7 +525,7 @@ bool NetServer::RecvProc(stSESSION* pSession, long cbTransferred)
 		}
 
 		// Len 확인 (음수거나 받을 수 있는 패킷 크기보다 클 때
-		if (header.len < 0 || header.len > MAX_PACKET_LEN)
+		if (header.len < 0 || header.len > MAXPACKETLEN)
 		{
 			DisconnectSession(pSession->sessionID);
 
@@ -541,7 +533,7 @@ bool NetServer::RecvProc(stSESSION* pSession, long cbTransferred)
 		}
 
 		// Packet 크기만큼 있는지 확인
-		if (useSize < sizeof(NetHeader) + header.len)
+		if (useSize < sizeof(WanHeader) + header.len)
 			break;
 
 		// packet alloc
@@ -627,7 +619,7 @@ bool NetServer::SendProc(stSESSION* pSession, long cbTransferred)
 		{
 			if (false == InterlockedExchange8((char*)&pSession->sendFlag, true))
 			{
-				InterlockedIncrement64(&pSession->ioRefCount);
+				InterlockedIncrement(&pSession->ioRefCount);
 				PostQueuedCompletionStatus(IOCPHandle, 0, (ULONG_PTR)pSession, (LPOVERLAPPED)PQCSTYPE::SENDPOST);
 			}
 		}
@@ -679,7 +671,7 @@ bool NetServer::RecvPost(stSESSION* pSession)
 
 	// recv
 	// ioCount : WSARecv 완료 통지가 리턴보다 먼저 떨어질 수 있으므로 WSARecv 호출 전에 증가시켜야 함
-	InterlockedIncrement64(&pSession->ioRefCount);
+	InterlockedIncrement(&pSession->ioRefCount);
 	int recvRet = WSARecv(pSession->m_socketClient, wsa, wsaCnt, NULL, &flags, &pSession->m_stRecvOverlapped, NULL);
 	InterlockedIncrement64(&recvCallCount);
 	InterlockedIncrement64(&recvCallTPS);
@@ -698,7 +690,7 @@ bool NetServer::RecvPost(stSESSION* pSession)
 			}
 
 			// Pending이 아닐 경우, 완료 통지 실패
-			if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+			if (0 == InterlockedDecrement(&pSession->ioRefCount))
 			{
 				ReleaseSession(pSession);
 			}
@@ -753,7 +745,7 @@ bool NetServer::SendPost(stSESSION* pSession)
 			{
 				if (false == InterlockedExchange8((char*)&pSession->sendFlag, true))
 				{
-					InterlockedIncrement64(&pSession->ioRefCount);
+					InterlockedIncrement(&pSession->ioRefCount);
 					PostQueuedCompletionStatus(IOCPHandle, 0, (ULONG_PTR)pSession, (LPOVERLAPPED)PQCSTYPE::SENDPOST);
 				}
 			}
@@ -764,7 +756,7 @@ bool NetServer::SendPost(stSESSION* pSession)
 	int deqIdx = 0;
 
 	// 링버퍼 등록
-	WSABUF wsa[MAX_WSA_BUF] = { 0 };
+	WSABUF wsa[MAXWSABUF] = { 0 };
 
 	while (pSession->sendQ.Dequeue(pSession->SendPackets[deqIdx]))
 	{
@@ -774,7 +766,7 @@ bool NetServer::SendPost(stSESSION* pSession)
 
 		deqIdx++;
 
-		if (deqIdx >= MAX_WSA_BUF)
+		if (deqIdx >= MAXWSABUF)
 			break;
 	}
 
@@ -786,7 +778,7 @@ bool NetServer::SendPost(stSESSION* pSession)
 
 	// send
 	// ioCount : WSASend 완료 통지가 리턴보다 먼저 떨어질 수 있으므로 WSASend 호출 전에 증가시켜야 함
-	InterlockedIncrement64(&pSession->ioRefCount);
+	InterlockedIncrement(&pSession->ioRefCount);
 	int sendRet = WSASend(pSession->m_socketClient, wsa, deqIdx, NULL, 0, &pSession->m_stSendOverlapped, NULL);
 	InterlockedIncrement64(&sendCallCount);
 	InterlockedIncrement64(&sendCallTPS);
@@ -805,7 +797,7 @@ bool NetServer::SendPost(stSESSION* pSession)
 			}
 
 			// Pending이 아닐 경우, 완료 통지 실패 -> IOCount값 복원
-			if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+			if (0 == InterlockedDecrement(&pSession->ioRefCount))
 			{
 				ReleaseSession(pSession);
 			}
@@ -851,7 +843,7 @@ bool NetServer::SendPostReservedDisconnect(stSESSION* pSession)
 			{
 				if (false == InterlockedExchange8((char*)&pSession->sendFlag, true))
 				{
-					InterlockedIncrement64(&pSession->ioRefCount);
+					InterlockedIncrement(&pSession->ioRefCount);
 					PostQueuedCompletionStatus(IOCPHandle, 0, (ULONG_PTR)pSession, (LPOVERLAPPED)PQCSTYPE::SENDPOSTDICONN);
 				}
 			}
@@ -860,7 +852,7 @@ bool NetServer::SendPostReservedDisconnect(stSESSION* pSession)
 	}
 
 	// 링버퍼 등록을 위한 변수
-	WSABUF wsa[MAX_WSA_BUF] = { 0 };
+	WSABUF wsa[MAXWSABUF] = { 0 };
 	int deqIdx = 0;
 
 	// sendQ에 쌓인 패킷들을 Dequeue하여 송신용 패킷 배열로 얻어옴
@@ -873,7 +865,7 @@ bool NetServer::SendPostReservedDisconnect(stSESSION* pSession)
 		deqIdx++;
 
 		// WSABUF 전송 최대 갯수만큼 담음
-		if (deqIdx >= MAX_WSA_BUF) break;
+		if (deqIdx >= MAXWSABUF) break;
 	}
 
 	// 완료 통지 시, PacketPool에 반환할 패킷 갯수
@@ -893,7 +885,7 @@ bool NetServer::SendPostReservedDisconnect(stSESSION* pSession)
 
 	// send
 	// ioCount : WSASend 완료 통지가 리턴보다 먼저 떨어질 수 있으므로 WSASend 호출 전에 증가시켜야 함
-	InterlockedIncrement64(&pSession->ioRefCount);
+	InterlockedIncrement(&pSession->ioRefCount);
 	int sendRet = WSASend(pSession->m_socketClient, wsa, deqIdx, NULL, 0, &pSession->m_stSendOverlapped, NULL);
 	InterlockedIncrement64(&sendCallCount);
 	InterlockedIncrement64(&sendCallTPS);
@@ -910,7 +902,7 @@ bool NetServer::SendPostReservedDisconnect(stSESSION* pSession)
 				OnError(sendError, L"SendPost # WSASend Error\n");
 
 			// Pending이 아닐 경우, 완료 통지 실패 -> IOCount값 복원
-			if (0 == InterlockedDecrement64(&pSession->ioRefCount))	
+			if (0 == InterlockedDecrement(&pSession->ioRefCount))	
 				ReleaseSession(pSession);
 
 			return false;
@@ -934,7 +926,7 @@ bool NetServer::SendPacketAndDisconnect(uint64_t sessionID, CPacket* packet, DWO
 	// 세션 사용 참조카운트 증가와 현재 세션이 Release 중인지 동시 확인 (인터락 연산으로 원자적 연산 보장)
 	// Release 비트값이 1(ioRefCount에서 상위 31bit 위치를 Release flag처럼 사용)이면 Release 작업 진행 중이라는 의미
 	// 어처피 다시 release가서 해제될 세션이므로 ioRefCount 감소 안해도 됨
-	if ((InterlockedIncrement64(&pSession->ioRefCount) & RELEASEMASKING)) return false;
+	if ((InterlockedIncrement(&pSession->ioRefCount) & RELEASEMASKING)) return false;
 
 	// ------------------------------------------------------------------------------------
 	// 이때부터는 Release 함수 진입도 못하고 온전히 SendPacket 과정을 진행할 수 있음
@@ -944,7 +936,7 @@ bool NetServer::SendPacketAndDisconnect(uint64_t sessionID, CPacket* packet, DWO
 	if (sessionID != pSession->sessionID)
 	{
 		// 외부 컨텐츠 로직의 성능 개선을 위해 Release 함수 처리도 PQCS 함수를 호출하여 비동기적으로 진행
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 			ReleasePQCS(pSession);
 
 		return false;
@@ -953,7 +945,7 @@ bool NetServer::SendPacketAndDisconnect(uint64_t sessionID, CPacket* packet, DWO
 	// 외부 컨텐츠에서 disconnect 하는 상태
 	if (pSession->isDisconnected)
 	{
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 			ReleasePQCS(pSession);
 		return false;
 	}
@@ -974,7 +966,7 @@ bool NetServer::SendPacketAndDisconnect(uint64_t sessionID, CPacket* packet, DWO
 	{
 		if (false == InterlockedExchange8((char*)&pSession->sendFlag, true))
 		{
-			InterlockedIncrement64(&pSession->ioRefCount);
+			InterlockedIncrement(&pSession->ioRefCount);
 
 			// 해당 세션의 Timeout 설정 
 			InterlockedExchange(&pSession->Timeout, timeout);
@@ -985,7 +977,7 @@ bool NetServer::SendPacketAndDisconnect(uint64_t sessionID, CPacket* packet, DWO
 	}
 
 	// sendPacket 함수에서 증가시킨 세션 참조 카운트 감소
-	if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+	if (0 == InterlockedDecrement(&pSession->ioRefCount))
 	{
 		ReleasePQCS(pSession);
 
@@ -1013,7 +1005,7 @@ bool NetServer::SendPacket(uint64_t sessionID, CPacket* packet)
 	// 세션 사용 참조카운트 증가 & Release 중인지 동시 확인
 	// Release 비트값이 1이면 ReleaseSession 함수에서 ioCount = 0, releaseFlag = 1 인 상태
 	// -> 이 사이에 Release 함수에서 ioCount도 0인걸 확인한 상태임 (decrement 안해도 됨)
-	if ((InterlockedIncrement64(&pSession->ioRefCount) & RELEASEMASKING))
+	if ((InterlockedIncrement(&pSession->ioRefCount) & RELEASEMASKING))
 	{
 		return false;
 	}
@@ -1025,7 +1017,7 @@ bool NetServer::SendPacket(uint64_t sessionID, CPacket* packet)
 	// 내 세션이 아닐 경우, 이전에 증가했던 ioCount를 되돌려야 함 (되돌리지 않으면 재할당 세션의 io가 0이 될 수가 없음)
 	if (sessionID != pSession->sessionID)
 	{
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 		{
 			ReleasePQCS(pSession);
 		}
@@ -1036,7 +1028,7 @@ bool NetServer::SendPacket(uint64_t sessionID, CPacket* packet)
 	// 외부에서 disconnect 하는 상태
 	if (pSession->isDisconnected)
 	{
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 		{
 			ReleasePQCS(pSession);
 		}
@@ -1060,13 +1052,13 @@ bool NetServer::SendPacket(uint64_t sessionID, CPacket* packet)
 	{
 		if (false == InterlockedExchange8((char*)&pSession->sendFlag, true))
 		{
-			InterlockedIncrement64(&pSession->ioRefCount);
+			InterlockedIncrement(&pSession->ioRefCount);
 			PostQueuedCompletionStatus(IOCPHandle, 0, (ULONG_PTR)pSession, (LPOVERLAPPED)PQCSTYPE::SENDPOST);
 		}
 	}
 
 	// sendPacket 함수에서 증가시킨 세션 참조 카운트 감소
-	if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+	if (0 == InterlockedDecrement(&pSession->ioRefCount))
 	{
 		ReleasePQCS(pSession);
 
@@ -1082,7 +1074,7 @@ void NetServer::ReleaseSession(stSESSION* pSession)
 	// 세선 해제
 	// ioCount == 0 && releaseFlag == 0 => release = 1 (인터락 함수로 해결)
 	// 다른 곳에서 해당 세션을 사용하는지 확인
-	if (InterlockedCompareExchange64(&pSession->ioRefCount, RELEASEMASKING, 0) != 0)
+	if (InterlockedCompareExchange(&pSession->ioRefCount, RELEASEMASKING, 0) != 0)
 	{
 		return;
 	}
@@ -1105,8 +1097,6 @@ void NetServer::ReleaseSession(stSESSION* pSession)
 	closesocket(sock);
 
 	InterlockedExchange8((char*)&pSession->sendFlag, false);
-
-	Sleep(0);
 
 	// Send Packet 관련 리소스 정리
 	// SendQ에서 Dqeueue하여 SendPacket 배열에 넣었지만 아직 WSASend 못해서 남아있는 패킷 정리
@@ -1161,7 +1151,7 @@ bool NetServer::DisconnectSession(uint64_t sessionID)
 	// 세션 사용 참조카운트 증가 & Release 중인지 동시 확인
 	// Release 비트값이 1이면 ReleaseSession 함수에서 ioCount = 0, releaseFlag = 1 인 상태
 	// 어처피 다시 release가서 해제될 세션이므로 ioRefCount 감소시키지 않아도 됨
-	if (InterlockedIncrement64(&pSession->ioRefCount) & RELEASEMASKING)
+	if (InterlockedIncrement(&pSession->ioRefCount) & RELEASEMASKING)
 	{
 		return false;
 	}
@@ -1173,7 +1163,7 @@ bool NetServer::DisconnectSession(uint64_t sessionID)
 	// 이전에 증가했던 ioCount를 되돌려야 함 (0이면 Release 진행)
 	if (sessionID != pSession->sessionID)
 	{
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 		{
 			ReleasePQCS(pSession);
 		}
@@ -1184,7 +1174,7 @@ bool NetServer::DisconnectSession(uint64_t sessionID)
 	// 외부에서 disconnect 하는 상태
 	if (pSession->isDisconnected)
 	{
-		if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+		if (0 == InterlockedDecrement(&pSession->ioRefCount))
 		{
 			ReleasePQCS(pSession);
 		}
@@ -1203,7 +1193,7 @@ bool NetServer::DisconnectSession(uint64_t sessionID)
 	CancelIoEx((HANDLE)pSession->m_socketClient, NULL);
 
 	// Disconnect 함수에서 증가시킨 세션 참조 카운트 감소
-	if (0 == InterlockedDecrement64(&pSession->ioRefCount))
+	if (0 == InterlockedDecrement(&pSession->ioRefCount))
 	{
 		ReleasePQCS(pSession);
 

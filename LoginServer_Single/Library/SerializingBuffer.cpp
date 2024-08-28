@@ -5,7 +5,7 @@ CPacket::CPacket() : m_iDataSize(0), m_iBufferSize(eBUFFER_DEFAULT), m_chpBuffer
 {
 	m_chpBuffer = new char[m_iBufferSize + 1];
 
-	lanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
+	LanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
 	readPos = writePos = m_chpBuffer + DEFAULT_HEADER_SIZE;
 }
 
@@ -13,7 +13,7 @@ CPacket::CPacket(int iBufferSize) : m_iDataSize(0), m_iBufferSize(iBufferSize), 
 {
 	m_chpBuffer = new char[m_iBufferSize + 1];
 
-	lanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
+	LanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
 	readPos = writePos = m_chpBuffer + DEFAULT_HEADER_SIZE;
 }
 
@@ -37,7 +37,7 @@ CPacket::CPacket(CPacket& clSrcPacket) : m_iDataSize(0), m_iBufferSize(eBUFFER_D
 		m_iDataSize = clSrcPacket.m_iDataSize;
 		m_iBufferSize = clSrcPacket.m_iBufferSize;
 
-		lanHeaderPtr = clSrcPacket.lanHeaderPtr;
+		LanHeaderPtr = clSrcPacket.LanHeaderPtr;
 
 		readPos = clSrcPacket.readPos;
 		writePos = clSrcPacket.writePos;
@@ -73,7 +73,7 @@ void CPacket::Resize(const char* methodName, int size)
 	m_chpBuffer = new char[m_iBufferSize];
 	memcpy_s(m_chpBuffer, m_iBufferSize, temp, m_iDataSize);
 
-	lanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
+	LanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
 	readPos = writePos = m_chpBuffer + DEFAULT_HEADER_SIZE;
 
 	// 임시 버퍼 delete
@@ -101,7 +101,7 @@ CPacket& CPacket::operator = (CPacket& clSrcPacket)
 	m_iDataSize = clSrcPacket.m_iDataSize;
 	m_iBufferSize = clSrcPacket.m_iBufferSize;
 
-	lanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
+	LanHeaderPtr = m_chpBuffer + WAN_HEADER_SIZE - LAN_HEADER_SIZE;
 
 	readPos = clSrcPacket.readPos;
 	writePos = clSrcPacket.writePos;
@@ -117,9 +117,9 @@ void CPacket::Encoding()
 		return;
 	}
 
-	NetHeader netHeader;
-	netHeader.code = m_code;
-	netHeader.len = m_iDataSize;
+	WanHeader WanHeader;
+	WanHeader.code = m_code;
+	WanHeader.len = m_iDataSize;
 
 	uint64_t checksum = 0;
 
@@ -130,11 +130,11 @@ void CPacket::Encoding()
 	}
 
 	checksum %= 256;
-	netHeader.checkSum = checksum;
+	WanHeader.checkSum = checksum;
 	srand(checksum);
-	netHeader.randKey = rand();
+	WanHeader.randKey = rand();
 
-	memcpy_s(m_chpBuffer, sizeof(NetHeader), &netHeader, sizeof(NetHeader));
+	memcpy_s(m_chpBuffer, sizeof(WanHeader), &WanHeader, sizeof(WanHeader));
 
 	unsigned char randKey = *(unsigned char*)(m_chpBuffer + 3);
 	unsigned char* d = (unsigned char*)(m_chpBuffer + 4);
@@ -173,7 +173,7 @@ bool CPacket::Decoding()
 
 	uint64_t checksum = 0;
 
-	char* payloadPtr = m_chpBuffer + sizeof(NetHeader);
+	char* payloadPtr = m_chpBuffer + sizeof(WanHeader);
 
 	// 체크섬 계산
 	for (unsigned char i = 0; i < m_iDataSize; i++)

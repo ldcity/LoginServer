@@ -1,10 +1,7 @@
-#pragma once
 #ifndef __NETSERVER_CLASS__
 #define __NETSERVER_CLASS__
 
 #include "../PCH.h"
-
-#define MAX_SESSION 500
 
 // 서버간 통신 모듈 클래스
 class NetServer
@@ -90,42 +87,41 @@ private:
 	bool SendPost(stSESSION* pSession);
 
 	// 패킷을 보내고 일정시간이 지나면 세션을 끊음
+	// 현재는 클라가 로그인 응답 패킷을 받으면 알아서 끊어주기 때문에 미사용=
 	bool SendPostReservedDisconnect(stSESSION* pSession);
 
 	// 세션 리소스 정리 및 해제
 	void ReleaseSession(stSESSION* pSession);
 
 	// uniqueID와 index로 고유한 SessionID 생성
-	inline uint64_t  CreateSessionID(uint64_t uniqueID, int index)
+	uint64_t  CreateSessionID(uint64_t uniqueID, int index)
 	{
 		return (uint64_t)((uint64_t)index | (uniqueID << SESSION_ID_BITS));
 	}
 
-	inline void ReleasePQCS(stSESSION* pSession)
+	void ReleasePQCS(stSESSION* pSession)
 	{
 		PostQueuedCompletionStatus(IOCPHandle, 0, (ULONG_PTR)pSession, (LPOVERLAPPED)PQCSTYPE::RELEASE);
 	}
 
-	inline int GetSessionIndex(uint64_t sessionID)
+	int GetSessionIndex(uint64_t sessionID)
 	{
 		return (int)(sessionID & SESSION_INDEX_MASK);
 	}
 
-	inline uint64_t GetSessionID(uint64_t sessionID)
+	uint64_t GetSessionID(uint64_t sessionID)
 	{
 		return (uint64_t)(sessionID >> SESSION_ID_BITS);
 	}
 
-	//// 타임아웃 주기 : 현재 시간 ~ 서버의 타임아웃 시간 (ms 단위)
-	//void SetTimeout(stSESSION* session)
-	//{
-	//	InterlockedExchange(&session->Timer, timeGetTime() + mTimeout);
-	//}
-
-	void SetTimeout(stSESSION* session);
+	// 타임아웃 주기 : 현재 시간 ~ 서버의 타임아웃 시간 (ms 단위)
+	void SetTimeout(stSESSION* session)
+	{
+		InterlockedExchange(&session->Timer, timeGetTime() + mTimeout);
+	}
 
 	// 타임아웃 주기 : 현재 시간 ~ 매개변수로 받은 타임아웃 시간 (ms 단위)
-	inline void SetTimeout(stSESSION* session, DWORD timeout)
+	void SetTimeout(stSESSION* session, DWORD timeout)
 	{
 		InterlockedExchange(&session->Timer, timeGetTime() + timeout);
 	}
