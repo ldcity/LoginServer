@@ -1,6 +1,7 @@
-#pragma once
 #ifndef __TEXT_PARSER__
 #define __TEXT_PARSER__
+
+#include <stdio.h>
 
 class TextParser
 {

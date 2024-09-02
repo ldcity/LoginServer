@@ -1,8 +1,6 @@
 #ifndef __SERVER_DEFINE__
 #define __SERVER_DEFINE__
 
-#include "../PCH.h"
-
 // 1회 송수신 시, WSABUF 최대 제한
 #define MAXWSABUF 200
 
@@ -35,5 +33,16 @@ struct WanHeader
 	unsigned char checkSum;
 };
 #pragma pack()
+
+enum DBLENSIZE
+{
+	QUERY_MAX_LEN = 1024,
+	QUERY_MAX_TIME = 1000,
+	DBCONNECT_TRY = 5,
+	SHORT_LEN = 16,
+	MIDDLE_LEN = 64,
+	LONG_LEN = 128
+};
+
 
 #endif // !__SERVER_DEFINE__

@@ -1,8 +1,8 @@
-#pragma once
 #ifndef __SESSION__
 #define __SESSION__
 
-#include "../PCH.h"
+#include "RingBuffer.h"
+#include "LockFreeQueue.h"
 
 const char SESSION_ID_BITS = 47;
 const __int64 SESSION_INDEX_MASK = 0x00007FFFFFFFFFFF;

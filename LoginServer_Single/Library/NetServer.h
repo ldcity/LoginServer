@@ -1,7 +1,15 @@
 #ifndef __NETSERVER_CLASS__
 #define __NETSERVER_CLASS__
 
-#include "../PCH.h"
+
+#include <WinSock2.h>
+#include <ws2tcpip.h>
+#include <process.h>
+
+#include "SerializingBuffer.h"
+#include "Session.h"
+#include "LockFreeStack.h"
+#include "../Utils/LOG.h"
 
 // 서버간 통신 모듈 클래스
 class NetServer
@@ -25,6 +33,8 @@ public:
 
 	// Server Stop
 	void Stop();
+
+	friend class ThreadWorker;
 
 protected:
 	// ==========================================================

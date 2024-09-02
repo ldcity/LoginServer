@@ -1,4 +1,3 @@
-#include "../PCH.h"
 #include "Redis.h"
 
 
@@ -20,7 +19,7 @@ void CRedis::Connect(std::wstring IP, unsigned short port)
 }
 
 // 동기
-bool CRedis::syncSet(const std::string& key, const std::string& value, int timeout)
+bool CRedis::SyncSet(const std::string& key, const std::string& value, int timeout)
 {
 	if (timeout > 0)
 	{
@@ -35,7 +34,7 @@ bool CRedis::syncSet(const std::string& key, const std::string& value, int timeo
 	return true;
 }
 
-cpp_redis::reply CRedis::syncGet(const std::string& key)
+cpp_redis::reply CRedis::SyncGet(const std::string& key)
 {
 	std::future<cpp_redis::reply> get_reply = client.get(key);
 
@@ -45,7 +44,7 @@ cpp_redis::reply CRedis::syncGet(const std::string& key)
 }
 
 // 비동기 set 호출
-void CRedis::asyncSet(const std::string& key, const std::string& value, int timeout, std::function<void(const cpp_redis::reply&)> callback)
+void CRedis::AsyncSet(const std::string& key, const std::string& value, int timeout, std::function<void(const cpp_redis::reply&)> callback)
 {
 	if (timeout > 0)
 	{
@@ -64,9 +63,9 @@ void CRedis::asyncSet(const std::string& key, const std::string& value, int time
 
 }
 
-
-
-
-
-
-
+void CRedis::AsyncGet(const std::string& key, std::function<void(const cpp_redis::reply&)> callback)
+{
+	client.get(key, [callback](const cpp_redis::reply& reply) {
+		callback(reply);
+	}).commit();
+}

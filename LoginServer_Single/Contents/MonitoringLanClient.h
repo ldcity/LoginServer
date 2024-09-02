@@ -1,7 +1,8 @@
 #ifndef __LAN_MONITORINGCLIENT_CLASS__
 #define __LAN_MONITORINGCLIENT_CLASS__
 
-#include "../PCH.h"
+#include "../Library/LanClient.h"
+
 
 class MonitoringLanClient : public LanClient
 {

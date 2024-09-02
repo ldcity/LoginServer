@@ -77,9 +77,6 @@ namespace ldcity
 		//////////////////////////////////////////////////////////////////////////
 		ObjectFreeList(int iBlockNum = 0, bool bPlacementNew = false);
 
-		//// MemoryFreeList에서 객체가 아닌 순수 메모리 할당을 위해 사용되는 생성자
-		//ObjectFreeList(int size);
-
 		virtual	~ObjectFreeList();
 
 
@@ -324,7 +321,6 @@ namespace ldcity
 		// 메모리 풀과 type이 다를 경우
 		if (temp->type != m_type)
 		{
-			wprintf(L"Pool Type Failed\n");
 			LeaveCriticalSection(&poolLock);
 			return false;
 		}
@@ -332,7 +328,6 @@ namespace ldcity
 		// 사용 중인 블럭이 없어서 더이상 해제할 블럭이 없을 경우
 		if (m_iUseCount == 0)
 		{
-			wprintf(L"Free Failed.\n");
 			LeaveCriticalSection(&poolLock);
 			return false;
 		}
@@ -361,9 +356,6 @@ namespace ldcity
 			_pFreeBlockNode = temp;
 			_pFreeBlockNode->next = nullptr;
 
-			//// buffer clear
-			//memset(&_pFreeBlockNode->data, 0, sizeof(_pFreeBlockNode->data));
-
 			// 사용중인 블럭 개수 감소
 			m_iUseCount--;
 
@@ -371,9 +363,6 @@ namespace ldcity
 
 			return true;
 		}
-
-		//// buffer clear
-		//memset(&temp->data, 0, sizeof(temp->data));
 
 		// 해당 객체를 _pFreeBlockNode(top)으로 변경
 		temp->next = _pFreeBlockNode;

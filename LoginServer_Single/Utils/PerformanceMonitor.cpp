@@ -1,6 +1,6 @@
-﻿#include "../PCH.h"
-#include"PerformanceMonitor.h"
+﻿#include"PerformanceMonitor.h"
 
+#include <iostream>
 #include <format>
 
 PerformanceMonitor::PerformanceMonitor(HANDLE hProcess)

@@ -62,12 +62,16 @@ struct Player
 
 };
 
-//struct ChatJob
-//{
-//	uint64_t sessionID;
-//	WORD type;
-//	CPacket* packet;
-//};
+enum DBLENSIZE
+{
+	QUERY_MAX_LEN = 1024,
+	QUERY_MAX_TIME = 1000,
+	DBCONNECT_TRY = 5,
+	SHORT_LEN = 16,
+	MIDDLE_LEN = 64,
+	LONG_LEN = 128
+};
+
 
 
 

@@ -1,8 +1,5 @@
-#pragma once
 #ifndef __TLS_FREE_LIST_VER2__
 #define __TLS_FREE_LIST_VER2__
-
-#include "../PCH.h"
 
 /*
 * TLSFreeList Class

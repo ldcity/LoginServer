@@ -3,7 +3,6 @@
 
 #include <Windows.h>
 #include <vector>
-#include <iostream>
 
 #define CRASH() do{ int* ptr = nullptr; *ptr = 100;} while(0)		// nullptr 접근해서 강제로 crash 발생
 

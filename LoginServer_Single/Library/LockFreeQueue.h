@@ -1,16 +1,7 @@
-#pragma once
 #ifndef __LOCKFREEQUEUE__HEADER__
 #define __LOCKFREEQUEUE__HEADER__
 
-#pragma comment(lib, "winmm.lib")
-
-#include <Windows.h>
-#include <vector>
-
 #include "LockFreeFreeList.h"
-//#include "TLSFreeList.h"
-
-#define CRASH() do { int* ptr = nullptr; *ptr = 100;} while(0);
 
 template <typename DATA>
 class LockFreeQueue

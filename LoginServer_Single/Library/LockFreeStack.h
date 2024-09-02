@@ -1,15 +1,7 @@
-#pragma once
 #ifndef __LOCKFREESTACK__HEADER__
 #define __LOCKFREESTACK__HEADER__
 
-#pragma comment(lib, "winmm.lib")
-
-#include <Windows.h>
-#include <vector>
-
 #include "LockFreeFreeList.h"
-
-#define CRASH() do { int* ptr = nullptr; *ptr = 100;} while(0);
 
 template <typename DATA>
 class LockFreeStack

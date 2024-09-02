@@ -255,8 +255,50 @@ enum en_PACKET_TYPE
 
 		*/
 
-
 		en_PACKET_ON_TIMEOUT = 2000,
+
+
+		en_PACKET_CS_DB_SERVER = 3000,
+		// ----------------------------------------------------------
+		// ** DB Server 프로토콜 **
+		// ----------------------------------------------------------
+
+		//------------------------------------------------------------
+		// account 테이블에 select 요청
+		//------------------------------------------------------------
+		//	wstring = L"SELECT userid, usernick FROM accountdb.account WHERE accountno = ?"
+		//
+		//	[paramPacket]
+		//	WORD			en_PACKET_SS_REQ_SELECT_ACCOUNT
+		//	INT64			acocuntNo
+		//------------------------------------------------------------
+		en_PACKET_SS_REQ_SELECT_ACCOUNT,
+
+
+		//------------------------------------------------------------
+		// sessionkey 테이블에 update 요청
+		//------------------------------------------------------------
+		//	wstring = L"UPDATE accountdb.sessionkey SET sessionkey = ? WHERE accountno = ?"
+		//
+		//	[paramPacket]
+		//	WORD			en_PACKET_SS_REQ_UPDATE_SESSIONKEY
+		//	string			sessionkey
+		//	INT64			acocuntNo
+		//------------------------------------------------------------
+		en_PACKET_SS_REQ_UPDATE_SESSIONKEY,
+
+
+		//------------------------------------------------------------
+		// account 테이블 select 성공 후 결과 패치를 위한 응답
+		//------------------------------------------------------------
+		//	[packet]
+		//	WORD			en_PACKET_SS_RES_SELECT_ACCOUNT		// account select 성공!
+		//	INT64			accountNo
+		//	char			SessionKey[64];
+		//	wchar_t			ID[20];
+		//	wchar_t			Nickname[20];
+		//------------------------------------------------------------
+		en_PACKET_SS_RES_SELECT_ACCOUNT,
 };
 
 

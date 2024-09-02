@@ -1,16 +1,13 @@
-#pragma once
 #ifndef __CRASH_DUMP__
 #define __CRASH_DUMP__
 
-#include "../PCH.h"
+#pragma comment(lib, "Dbghelp.lib")
 
 #include <Windows.h>
 #include <psapi.h>
 #include <stdio.h>
 #include <minidumpapiset.h>
 #include <crtdbg.h>
-
-#pragma comment(lib, "Dbghelp.lib")
 
 namespace lib
 {

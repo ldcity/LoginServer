@@ -1,4 +1,6 @@
-#include "../PCH.h"
+#include "NetServer.h"
+#include "../Utils/Define.h"
+
 
 // ========================================================================
 // Thread Call
@@ -1212,7 +1214,6 @@ void NetServer::Stop()
 	{
 		PostQueuedCompletionStatus(IOCPHandle, 0, 0, 0);
 	}
-
 
 	WaitForMultipleObjects(mWorkerThreadCount, &mWorkerThreads[0], TRUE, INFINITE);
 	closesocket(ListenSocket);

@@ -39,9 +39,6 @@
     <ClCompile Include="Utils\DBConnection.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="Utils\DBConnection_TLS.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="Utils\Exception.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
@@ -57,10 +54,19 @@
     <ClCompile Include="Utils\TextParser.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="PCH.cpp">
+    <ClCompile Include="Contents\main.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="Contents\main.cpp">
+    <ClCompile Include="Contents\DBJob.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Library\ThreadWorker.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Contents\DBJobThread.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Contents\RedisJobThread.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
@@ -69,9 +75,6 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Utils\DBConnection.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="Utils\DBConnection_TLS.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Utils\Define.h">
@@ -143,7 +146,16 @@
     <ClInclude Include="Contents\Packet.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="PCH.h">
+    <ClInclude Include="Contents\DBJob.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Library\ThreadWorker.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Contents\DBJobThread.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Contents\RedisJobThread.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

@@ -1,7 +1,9 @@
 #ifndef  __SERIALIZING_PACKET__
 #define  __SERIALIZING_PACKET__
 
-#include "../PCH.h"
+#include "../Utils/Exception.h"
+#include "TLSFreeList.h"
+#include "../Utils/Define.h"
 
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -507,9 +509,6 @@ public:
 			packet->Clear();
 			PacketPool.Free(packet);
 		}
-
-		if (packet->ref_cnt < 0)
-			CRASH();
 	}
 
 	inline static void SetCode(unsigned char code)
@@ -558,7 +557,7 @@ public:
 	}
 
 	// Packet Memory Pool
-	inline static TLSObjectPool<CPacket> PacketPool = TLSObjectPool<CPacket>(100);
+	inline static TLSObjectPool<CPacket> PacketPool = TLSObjectPool<CPacket>(2000);
 
 private:
 

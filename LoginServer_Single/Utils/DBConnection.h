@@ -1,7 +1,19 @@
 #ifndef __DBCONNECTION_CLASS__
 #define __DBCONNECTION_CLASS__
 
-#include "../PCH.h"
+#pragma comment(lib, "libmysql.lib")
+
+#include <winsock2.h>
+#include <Windows.h>
+
+#include <functional>
+#include <string>
+
+#include "LOG.h"
+#include "Define.h"
+#include "../Library/TLSFreeList.h"
+
+#include "../mysql/include/mysql.h"
 
 class DBConnector
 {
@@ -9,20 +21,11 @@ public:
 	DBConnector(const wchar_t* host, const wchar_t* user, const wchar_t* password, const wchar_t* db, unsigned short port, bool sslOff);
 	~DBConnector();
 
-	enum myDB
-	{
-		QUERY_MAX_LEN = 1024,
-		QUERY_MAX_TIME = 1000,
-		DBCONNECT_TRY = 5,
-		SHORT_LEN = 16,
-		MIDDLE_LEN = 64,
-		LONG_LEN = 128
-	};
-
 public:
 	// MySQL 데이터 타입 추론
 	template<typename T>
 	enum enum_field_types GetMysqlType();
+
 
 	// MySQL 데이터 타입 추론 특수화
 	template<>
@@ -56,6 +59,12 @@ public:
 	}
 
 	template<>
+	enum enum_field_types GetMysqlType<std::wstring>()
+	{
+		return MYSQL_TYPE_STRING;
+	}
+
+	template<>
 	enum enum_field_types GetMysqlType<const char*>()
 	{
 		return MYSQL_TYPE_STRING;
@@ -82,6 +91,24 @@ public:
 	// 필요시, 기타 특수화 추가...
 
 private:
+	void BindParam(std::vector<MYSQL_BIND>& bindParams, std::wstring& value)
+	{
+		MYSQL_BIND bind;
+		memset(&bind, 0, sizeof(MYSQL_BIND));
+
+		// std::wstring을 UTF-8로 변환하기 위한 충분한 버퍼 크기 계산
+		int utf8Length = WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, NULL, 0, NULL, NULL);
+		std::string utf8Value(utf8Length, 0);
+
+		// 변환 수행
+		WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, &utf8Value[0], utf8Length, NULL, NULL);
+
+		bind.buffer_type = MYSQL_TYPE_STRING;
+		bind.buffer = (char*)utf8Value.c_str();
+		bind.buffer_length = utf8Value.length();
+
+		bindParams.push_back(bind);
+	}
 
 	// std::string에 대한 명시적 오버로딩
 	void BindParam(std::vector<MYSQL_BIND>& bindParams, std::string& value)
@@ -92,7 +119,6 @@ private:
 		bind.buffer_type = MYSQL_TYPE_STRING;
 		bind.buffer = (char*)value.c_str();
 		bind.buffer_length = value.length();
-		bind.is_null = 0;
 
 		bindParams.push_back(bind);
 	}
@@ -106,7 +132,6 @@ private:
 		bind.buffer_type = MYSQL_TYPE_STRING;
 		bind.buffer = (char*)value;
 		bind.buffer_length = strlen(value);  // 문자열 길이 계산
-		bind.is_null = 0;
 
 		bindParams.push_back(bind);
 	}
@@ -117,23 +142,6 @@ private:
 	{
 		BindParam(bindParams, static_cast<const char*>(value));
 	}
-
-
-
-	void BindParam(std::vector<MYSQL_BIND>& bindParams, std::wstring& value)
-	{
-		MYSQL_BIND bind;
-		memset(&bind, 0, sizeof(MYSQL_BIND));
-
-		bind.buffer_type = MYSQL_TYPE_STRING;
-		bind.buffer = (char*)value.c_str();
-		bind.buffer_length = value.length() * sizeof(wchar_t);
-		bind.is_null = 0;
-		bind.length = &bind.buffer_length;
-
-		bindParams.push_back(bind);
-	}
-
 
 	// 매개변수 바인딩을 처리하는 함수
 	template<typename T>
@@ -160,8 +168,6 @@ private:
 
 		bind.buffer_type = GetMysqlType<T>();
 		bind.buffer = (char*)&value;
-		bind.is_null = 0;
-		bind.is_unsigned = true;
 
 		bindParams.push_back(bind);
 	}
@@ -200,7 +206,12 @@ private:
 			return -1;
 		}
 
-		return mysql_stmt_fetch(stmt);
+		int stmtResult = mysql_stmt_fetch(stmt);
+
+		//mysql_stmt_close(stmt);
+		//stmtPool.Free(stmt);
+
+		return stmtResult;
 	}
 
 public:
@@ -210,14 +221,10 @@ public:
 	// DB 연결 끊기
 	void Close();
 
-	// Transaction Start
-	bool StartTransaction();
-
-	// Commit
-	bool Commit();
-
 	// 매개변수화된 쿼리 실행 - 벡터 버전
 	bool ExecuteQuery(const std::wstring& query, std::vector<MYSQL_BIND>& bindParams, std::function<bool(MYSQL_STMT*, Log* dbLog)> resultHandler);
+
+	MYSQL_STMT* ExecuteQuery(const std::wstring& query, std::vector<MYSQL_BIND>& bindParams);
 
 	// 템플릿 함수로 매개변수를 바인딩 - 가변 인자 받음
 	template<typename... Args>
@@ -228,6 +235,15 @@ public:
 		return ExecuteQuery(query, bindParams, resultHandler);
 	}
 
+	// 템플릿 함수로 매개변수를 바인딩 - 가변 인자 받음, 결과 후처리 핸들러 없는 버전
+	template<typename... Args>
+	MYSQL_STMT* ExecuteSelectQuery(const std::wstring& query, Args... args)
+	{
+		std::vector<MYSQL_BIND> bindParams;
+		BindParams(bindParams, args...);
+		return ExecuteQuery(query, bindParams);
+	}
+
 	// 결과 패치 함수
 	template<typename... T>
 	bool FetchResult(MYSQL_STMT* stmt, T&... args)
@@ -235,43 +251,11 @@ public:
 		return FetchResultImpl(stmt, args...);
 	}
 
-	// Make Query - 쿼리 날리고 결과 임시 보관
-	// [return]
-	// -1 : 일반적인 실패
-	// 0 : 쿼리 성공 후 반환된 row 값이 0 (table 내에 없는 값 select
-	// 1 이상 : 쿼리 성공 후 반환된 row 값
-	int Query(const wchar_t* strFormat, ...);
-	
-	// Make Query - 쿼리 날리고 결과 저장 X
-	bool QuerySave(const wchar_t* strFormat, ...);
-
-	// Transaction ~ Query ~ Commit
-	bool AllQuery(std::string query);
-
-	// 쿼리 날린 것에 대한 결과 뽑아오기
-	inline MYSQL_ROW FetchRow()
-	{
-		return mysql_fetch_row(myResult);
-	}
-
-	// 한 쿼리에 대한 결과 모두 사용 후 정리
-	inline void FreeResult()
-	{
-		mysql_free_result(myResult);
-	}
-
-	inline void* GetConnectionStatus()
-	{
-		return connection;
-	}
-
-	void onError();
-
 private:
 	MYSQL conn;
 	MYSQL* connection;
-
-	MYSQL_RES* myResult;
+	
+	MYSQL_STMT* mStmt;
 
 	wchar_t mHost[SHORT_LEN];
 	wchar_t mUser[MIDDLE_LEN];
@@ -285,18 +269,6 @@ private:
 
 	unsigned short mPort;
 	bool mFlag;
-
-	wchar_t mQuery[QUERY_MAX_LEN];
-	char mQueryUTF8[QUERY_MAX_LEN];
-
-	wchar_t errorMsg[LONG_LEN];
-	char errorMsgUTF8[LONG_LEN];
-
-	ULONGLONG mQueryTime;
-
-	uint64_t connectCnt;
-	uint64_t connectFailCnt;
-	uint64_t disconnectCnt;
 
 private:
 	Log* dbLog;

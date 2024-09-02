@@ -1,4 +1,3 @@
-#include "../PCH.h"
 #include "LanClient.h"
 
 // ========================================================================
@@ -18,7 +17,7 @@ unsigned __stdcall LanWorkerThread(void* param)
 
 LanClient::LanClient() :  IOCPHandle(0), mIP{ 0 }, mPORT(0), mWorkerThreads{ 0 }, recvMsgTPS(0), sendMsgTPS(0),
 recvMsgCount(0), sendMsgCount(0), recvCallTPS(0), sendCallTPS(0), recvCallCount(0), sendCallCount(0), recvPendingTPS(0), sendPendingTPS(0),
-recvBytesTPS(0), sendBytesTPS(0), recvBytes(0), sendBytes(0), s_workerThreadCount(0), s_runningThreadCount(0), startMonitering(false)
+recvBytesTPS(0), sendBytesTPS(0), recvBytes(0), sendBytes(0), mWorkerThreadCount(0), mRunningThreadCount(0), startMonitering(false)
 {
 	// ========================================================================
 	// Initialize
@@ -44,7 +43,7 @@ recvBytesTPS(0), sendBytesTPS(0), recvBytes(0), sendBytes(0), s_workerThreadCoun
 
 	mOk = false;
 
-	logger = new Log(L"LanClient");
+	logger = new Log(L"LanClient.txt");
 
 	WSADATA  wsaData;
 
@@ -73,18 +72,18 @@ bool LanClient::Start(const wchar_t* IP, unsigned short PORT, int createWorkerTh
 	// CPU Core Counting
 	// Worker Thread 개수가 0 이하라면, 코어 개수 * 2 로 재설정
 	if (createWorkerThreadCnt <= 0)
-		s_workerThreadCount = si.dwNumberOfProcessors * 2;
+		mWorkerThreadCount = si.dwNumberOfProcessors * 2;
 	else
-		s_workerThreadCount = createWorkerThreadCnt;
+		mWorkerThreadCount = createWorkerThreadCnt;
 	
 	// Running Thread가 CPU Core 개수를 초과한다면 CPU Core 개수로 재설정
 	if (runningWorkerThreadCnt > si.dwNumberOfProcessors)
-		s_runningThreadCount = si.dwNumberOfProcessors;
+		mRunningThreadCount = si.dwNumberOfProcessors;
 	else
-		s_runningThreadCount = runningWorkerThreadCnt;
+		mRunningThreadCount = runningWorkerThreadCnt;
 
 	// Create I/O Completion Port
-	IOCPHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, s_runningThreadCount);
+	IOCPHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, mRunningThreadCount);
 	if (IOCPHandle == NULL)
 	{
 		int iocpError = WSAGetLastError();
@@ -97,7 +96,7 @@ bool LanClient::Start(const wchar_t* IP, unsigned short PORT, int createWorkerTh
 	// ======================================================================== 
  
 	// Worker Thread
-	mWorkerThreads.resize(s_workerThreadCount);
+	mWorkerThreads.resize(mWorkerThreadCount);
 	for (int i = 0; i < mWorkerThreads.size(); i++)
 	{
 		mWorkerThreads[i] = (HANDLE)_beginthreadex(NULL, 0, LanWorkerThread, this, 0, NULL);
@@ -774,19 +773,19 @@ void LanClient::Stop()
 	// stop 함수 추후 구현 완료
 
 	// worker thread로 종료 PQCS 날김
-	for (int i = 0; i < s_workerThreadCount; i++)
+	for (int i = 0; i < mWorkerThreadCount; i++)
 	{
 		PostQueuedCompletionStatus(IOCPHandle, 0, 0, 0);
 	}
 
 
-	WaitForMultipleObjects(s_workerThreadCount, &mWorkerThreads[0], TRUE, INFINITE);
+	WaitForMultipleObjects(mWorkerThreadCount, &mWorkerThreads[0], TRUE, INFINITE);
 
 	closesocket(mSession.m_socketClient);
 
 	CloseHandle(IOCPHandle);
 
-	for (int i = 0; i < s_workerThreadCount; i++)
+	for (int i = 0; i < mWorkerThreadCount; i++)
 		CloseHandle(mWorkerThreads[i]);
 
 	WSACleanup();

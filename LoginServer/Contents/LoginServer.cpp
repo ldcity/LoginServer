@@ -1,16 +1,9 @@
 #include "../PCH.h"
+#include <conio.h>
+
 
 DWORD LoginServer::_DBTlsIdx = TlsAlloc();
-
-// Redis Job Worker Thread
-unsigned __stdcall RedisJobWorkerThread(PVOID param)
-{
-	LoginServer* logServ = (LoginServer*)param;
-
-	logServ->RedisJobWorkerThread_serv();
-
-	return 0;
-}
+DWORD LoginServer::_RedisTlsIdx = TlsAlloc();
 
 // Worker Thread Call
 unsigned __stdcall MoniteringThread(void* param)
@@ -50,15 +43,11 @@ bool LoginServer::LoginServerStart()
 	loginServerInfoTxt.GetValue(L"DB.DBNAME", dbName);
 	loginServerInfoTxt.GetValue(L"DB.PORT", &dbPort);
 
-	int port;
-
-	//// DBConnector_TLS 객체 생성
-	//dbConn_TLS = new DBConnector_TLS(host, user, password, dbName, port, true);
-
 	loginServerInfoTxt.GetValue(L"CHATSERVER.BIND_IP", chatIP);
 	loginServerInfoTxt.GetValue(L"CHATSERVER.BIND_PORT", &chatPort);
 
 	wchar_t ip[20];
+	int port;
 
 	loginServerInfoTxt.GetValue(L"LOGINSERVER.BIND_IP", ip);
 	loginServerInfoTxt.GetValue(L"LOGINSERVER.BIND_PORT", &port);
@@ -86,7 +75,7 @@ bool LoginServer::LoginServerStart()
 	int sessionMAXCnt;
 	loginServerInfoTxt.GetValue(L"LOGINSERVER.SESSION_MAX", &sessionMAXCnt);
 
-	loginServerInfoTxt.GetValue(L"LOGINSERVER.USER_MAX", &m_userMAXCnt);
+	loginServerInfoTxt.GetValue(L"LOGINSERVER.USER_MAX", &mUserMAXCnt);
 
 	int packet_code;
 	loginServerInfoTxt.GetValue(L"LOGINSERVER.PACKET_CODE", &packet_code);
@@ -94,7 +83,7 @@ bool LoginServer::LoginServerStart()
 	int packet_key;
 	loginServerInfoTxt.GetValue(L"LOGINSERVER.PACKET_KEY", &packet_key);
 
-	loginServerInfoTxt.GetValue(L"SERVICE.TIMEOUT_DISCONNECT", &m_timeout);
+	loginServerInfoTxt.GetValue(L"SERVICE.TIMEOUT_DISCONNECT", &mTimeout);
 
 	// Login Lan Client Start
 	bool clientRet = lanClient.MonitoringLanClientStart();
@@ -119,18 +108,12 @@ bool LoginServer::LoginServerStart()
 		return false;
 	}
 
-	wchar_t redisIP[20];
 	loginServerInfoTxt.GetValue(L"REDIS.IP", redisIP);
-
-	int redisPort;
 	loginServerInfoTxt.GetValue(L"REDIS.PORT", &redisPort);
 
-	mRedis = new CRedis;
-	mRedis->Connect(redisIP, redisPort);
-
 	// Create Manual Event
-	m_runEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-	if (m_runEvent == NULL)
+	mRunEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (mRunEvent == NULL)
 	{
 		int eventError = WSAGetLastError();
 		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"CreateEvent() Error : %d", eventError);
@@ -139,8 +122,8 @@ bool LoginServer::LoginServerStart()
 	}
 
 	// Create Auto Event
-	m_moniterEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-	if (m_moniterEvent == NULL)
+	mMoniterEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (mMoniterEvent == NULL)
 	{
 		int eventError = WSAGetLastError();
 		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"CreateEvent() Error : %d", eventError);
@@ -148,19 +131,10 @@ bool LoginServer::LoginServerStart()
 		return false;
 	}
 
-	// Create Auto Event
-	m_redisJobEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-	if (m_redisJobEvent == NULL)
-	{
-		int eventError = WSAGetLastError();
-		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"CreateEvent() Error : %d", eventError);
-
-		return false;
-	}
  
 	// Monitering Thread
-	m_moniteringThread = (HANDLE)_beginthreadex(NULL, 0, MoniteringThread, this, CREATE_SUSPENDED, NULL);
-	if (m_moniteringThread == NULL)
+	mMoniteringThread = (HANDLE)_beginthreadex(NULL, 0, MoniteringThread, this, CREATE_SUSPENDED, NULL);
+	if (mMoniteringThread == NULL)
 	{
 		int threadError = GetLastError();
 		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"_beginthreadex() Error : %d", threadError);
@@ -168,27 +142,13 @@ bool LoginServer::LoginServerStart()
 		return false;
 	}
 
-	// Redis Job Worker Thread
-	m_redisJobHandle = (HANDLE)_beginthreadex(NULL, 0, RedisJobWorkerThread, this, 0, NULL);
-	if (m_redisJobHandle == NULL)
-	{
-		int threadError = GetLastError();
-		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"_beginthreadex() Error : %d", threadError);
-
-		return false;
-	}
-
-	WaitForSingleObject(m_moniteringThread, INFINITE);
-	WaitForSingleObject(m_redisJobHandle, INFINITE);
+	WaitForSingleObject(mMoniteringThread, INFINITE);
 
 	return true;
 }
 
 bool LoginServer::LoginServerStop()
 {
-	loginLog->~Log();
-	logger->~Log();
-
 	DBConnector* dbConn;
 
 	// 리소스 정리 작업을 위해 필요한 LockFreeStack에서 DBConnector 객체 pop
@@ -197,37 +157,33 @@ bool LoginServer::LoginServerStop()
 
 	TlsFree(_DBTlsIdx);
 
-	delete mRedis;
+	CRedis* redis;
 
-	CloseHandle(m_moniteringThread);
-	CloseHandle(m_moniterEvent);
-	CloseHandle(m_runEvent);
+	// 리소스 정리 작업을 위해 필요한 LockFreeStack에서 DBConnector 객체 pop
+	while (tlsRedisObjects.Pop(&redis))
+		delete redis;
 
-	CloseHandle(m_redisJobEvent);
-	CloseHandle(m_redisJobHandle);
+	TlsFree(_RedisTlsIdx);
+
+	CloseHandle(mMoniteringThread);
+	CloseHandle(mMoniterEvent);
+	CloseHandle(mRunEvent);
 
 	mysql_library_end(); // MySQL 라이브러리 종료
 
 	return true;
 }
 
-
 // Monitering Thread
 bool LoginServer::MoniterThread_serv()
 {
-	DWORD threadID = GetCurrentThreadId();
-
-	//logger->logger(dfLOG_LEVEL_DEBUG, __LINE__, L"MoniteringThread[%d] Start...", threadID);
-
 	while (true)
 	{
 		// 1초마다 모니터링 -> 타임아웃 건도 처리
-		DWORD ret = WaitForSingleObject(m_moniterEvent, 1000);
-
+		DWORD ret = WaitForSingleObject(mMoniterEvent, 1000);
 		if (ret == WAIT_TIMEOUT)
 		{
 			// 모니터링 서버 전송용 데이터
-			//__int64 iJobThreadUpdateCnt = InterlockedExchange64(&m_jobThreadUpdateCnt, 0);
 			__int64 iSessionCnt = sessionCnt;
 			__int64 iAuthCnt = InterlockedExchange64(&m_loginSuccessTPS, 0);
 
@@ -251,10 +207,9 @@ bool LoginServer::MoniterThread_serv()
 			wprintf(L"[Send  Packet         ] Total    : %10I64d    TPS : %10I64d\n", sendMsgCount, InterlockedExchange64(&sendMsgTPS, 0));
 			wprintf(L"[Pending TPS          ] Recv     : %10I64d    Send: %10I64d\n", InterlockedExchange64(&recvPendingTPS, 0), InterlockedExchange64(&sendPendingTPS, 0));
 			wprintf(L"------------------------[Contents]----------------------------\n");
-			wprintf(L"[Update               ] Total    : %10I64d    TPS        : %10I64d\n", m_updateTotal, InterlockedExchange64(&m_updateTPS, 0));
-			wprintf(L"[RedisQ               ] Size     : %10I64d\n", redisJobQ.GetSize());
-			wprintf(L"[Redis Job Pool       ] Capacity : %10llu     Use        : %10llu    Alloc : %10llu    Free : %10llu\n",
-				redisJobPool.GetCapacity(), redisJobPool.GetObjectUseCount(), redisJobPool.GetObjectAllocCount(), redisJobPool.GetObjectFreeCount());
+			wprintf(L"[Update               ] TPS      : %10I64d\n", InterlockedExchange64(&m_updateTPS, 0));
+			wprintf(L"[Login Res Update     ] TPS      : %10I64d\n", InterlockedExchange64(&m_loginResJobUpdateTPS, 0));
+			wprintf(L"[Redis Update         ] TPS      : %10I64d\n", InterlockedExchange64(&m_redisJobThreadUpdateTPS, 0));
 			wprintf(L"[Packet Pool          ] Capacity : %10llu     Use        : %10llu    Alloc : %10llu    Free : %10llu\n",
 				packetPoolCapacity, packetPoolUseCnt, packetPoolAllocCnt, packetPoolFreeCnt);
 			wprintf(L"[Login Packet         ] Total    : %10I64d    TPS        : %10I64d \n",
@@ -265,9 +220,6 @@ bool LoginServer::MoniterThread_serv()
 				m_loginFailCount, InterlockedExchange64(&m_loginFailTPS, 0));
 			wprintf(L"[DB                   ] Total    : %10I64d    TPS        : %10I64d\n",
 				m_dbQueryTotal, InterlockedExchange64(&m_dbQueryTPS, 0));
-			wprintf(L"[Redis Update         ] Enqueue  : %10I64d    TPS         : %10I64d\n", InterlockedExchange64(&m_redisJobEnqueueTPS, 0), InterlockedExchange64(&m_redisJobThreadUpdateTPS, 0));
-			wprintf(L"[Redis Set            ] Total    : %10I64d    TPS         : %10I64d\n", m_redisSetCnt, InterlockedExchange64(&m_redisSetTPS, 0));
-			wprintf(L"==============================================================\n\n");
 
 			// 모니터링 서버로 데이터 전송
 			int iTime = (int)time(NULL);
@@ -310,50 +262,7 @@ bool LoginServer::MoniterThread_serv()
 			CPacket::Free(poolPacket);
 		}
 	}
-
 	return true;
-}
-
-bool LoginServer::RedisJobWorkerThread_serv()
-{
-	DWORD threadID = GetCurrentThreadId();
-
-	while (true)
-	{
-		// JobQ에 Job이 삽입되면 이벤트 발생하여 깨어남
-		WaitForSingleObject(m_redisJobEvent, INFINITE);
-
-		RedisJob* redisJob = nullptr;
-
-		// Job이 없을 때까지 update 반복
-		while (redisJobQ.GetSize() > 0)
-		{
-			if (redisJobQ.Dequeue(redisJob))
-			{
-				// 비동기 redis set요청
-				mRedis->asyncSet(redisJob->accountNo, redisJob->sessionKey, 30, [=](const cpp_redis::reply& reply) {
-
-					// redis set 완료 콜백
-					if (reply.is_string() && reply.as_string() == "OK")
-					{
-						// 비동기 요청이 성공하면 이후 로그인 응답 처리에 대한 일감을 PQCS로 던짐
-						JobPQCS(redisJob->sessionID, redisJob->packet);
-
-						// JobPool에 Job 객체 반환
-						redisJobPool.Free(redisJob);
-
-						InterlockedIncrement64(&m_redisJobThreadUpdateTPS);
-					}
-					else
-					{
-						// 실패 처리
-						loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Redis Set failed for accountNo : %IId", redisJob->accountNo);
-						CRASH();
-					}
-				});
-			}
-		}
-	}
 }
 
 bool LoginServer::OnConnectionRequest(const wchar_t* IP, unsigned short PORT)
@@ -365,7 +274,7 @@ void LoginServer::OnClientJoin(uint64_t sessionID)
 {
 	if (!startFlag)
 	{
-		ResumeThread(m_moniteringThread);
+		ResumeThread(mMoniteringThread);
 		startFlag = true;
 	}
 
@@ -388,18 +297,6 @@ void LoginServer::OnRecv(uint64_t sessionID, CPacket* packet)
 	if (packet != nullptr)
 		CPacket::Free(packet);
 
-	InterlockedIncrement64(&m_updateTotal);
-	InterlockedIncrement64(&m_updateTPS);
-}
-
-void LoginServer::OnJob(uint64_t sessionID, CPacket* packet)
-{
-	netPacketProc_ResLoginRedis(sessionID, packet);
-
-	if (packet != nullptr)
-		CPacket::Free(packet);
-
-	InterlockedIncrement64(&m_updateTotal);
 	InterlockedIncrement64(&m_updateTPS);
 }
 
@@ -413,7 +310,6 @@ void LoginServer::OnTimeout(uint64_t sessionID)
 {
 	PacketProc(sessionID, nullptr, en_PACKET_ON_TIMEOUT);
 
-	InterlockedIncrement64(&m_updateTotal);
 	InterlockedIncrement64(&m_updateTPS);
 }
 
@@ -423,7 +319,7 @@ void LoginServer::PacketProc(uint64_t sessionID, CPacket* packet, WORD type)
 	{
 	case en_PACKET_CS_LOGIN_REQ_LOGIN:
 		// 로그인 요청
-		netPacketProc_ReqLogin(sessionID, packet);
+		NetPacketProc_ReqLogin(sessionID, packet);
 		break;
 
 	case en_PACKET_ON_TIMEOUT:
@@ -441,7 +337,7 @@ void LoginServer::PacketProc(uint64_t sessionID, CPacket* packet, WORD type)
 }
 
 // 로그인 요청
-void LoginServer::netPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet)
+void LoginServer::NetPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet)
 {
 	InterlockedIncrement64(&m_loginCount);
 	InterlockedIncrement64(&m_loginTPS);
@@ -491,14 +387,14 @@ void LoginServer::netPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet)
 		return;
 	}
 
-	DBConnector* dbConn_TLS = (DBConnector*)TlsGetValue(this->_DBTlsIdx);
-	if (dbConn_TLS == nullptr)
+	DBConnector* mDBConn = (DBConnector*)TlsGetValue(this->_DBTlsIdx);
+	if (mDBConn == nullptr)
 	{
-		dbConn_TLS = new DBConnector(host, user, password, dbName, dbPort, true);
-		dbConn_TLS->Open();
+		mDBConn = new DBConnector(host, user, password, dbName, dbPort, true);
+		mDBConn->Open();
 
-		TlsSetValue(this->_DBTlsIdx, dbConn_TLS);
-		tlsDBObjects.Push(dbConn_TLS);
+		TlsSetValue(this->_DBTlsIdx, mDBConn);
+		tlsDBObjects.Push(mDBConn);
 	}
 
 	// ---------------------------------------------------------------------
@@ -506,220 +402,115 @@ void LoginServer::netPacketProc_ReqLogin(uint64_t sessionID, CPacket* packet)
 	// 이러한 느린 접근도 대응할 수 있는지 파악하기 위해
 	// DB 접근을 통한 비슷한 상황 유도 (부하가 걸리는 작업)
 
-	// accountNo에 해당하는 account table 정보 select
-	std::wstring query = L"select * from accountdb.account where accountno=";
-	query += std::to_wstring(_accountNo);
-	query += L";";
+	// select 이후 해당 행의 컬럼 값 추출 (결과 버퍼)
+	char id[ID_MAX_LEN] = { 0 };
+	char nickname[NICKNAME_MAX_LEN] = { 0 };
 
-	int queryRet = dbConn_TLS->Query(query.c_str());
+	std::wstring query = L"SELECT userid, usernick FROM accountdb.account WHERE accountno = ?";
 
-	// 쿼리 실패
-	if (queryRet < -1)
-	{
-		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Login Request Packet # account select query fail");
+	// 매개변수 바인딩 & 쿼리 요청
+	bool isDBSuccess = mDBConn->ExecuteQuery(query, [&, this](MYSQL_STMT* stmt, Log* dblog) -> bool {
+		int fetchResult = mDBConn->FetchResult(stmt, id, nickname);
 
-		return;
-	}
-	// account table에 accountNo 없음 -> 요청 실패에 대한 응답 전송
-	else if (queryRet == 0)
-	{
-		dbConn_TLS->FreeResult();
+		// 실패
+		if (fetchResult == -1)
+		{
+			loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Result binding failed : %s", mysql_stmt_error(stmt));
+			return false;
+		}
+		// 테이블에 레코드 없음
+		else if (fetchResult == MYSQL_NO_DATA)
+		{
+			// account 테이블에 해당 계정 정보가 없음
+			BYTE status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_ACCOUNT_MISS;
 
-		InterlockedIncrement64(&m_loginFailCount);
-		InterlockedIncrement64(&m_loginFailTPS);
+			CPacket* resLoginPacket = CPacket::Alloc();
 
-		status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_ACCOUNT_MISS;
+			wchar_t nonID[ID_MAX_LEN] = { 0 };
+			wchar_t nonNickname[NICKNAME_MAX_LEN] = { 0 };
 
-		CPacket* resLoginPacket = CPacket::Alloc();
+			CPacket* resLoginPacket = CPacket::Alloc();
 
-		mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
+			MPResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
 
-		SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
-		
-		CPacket::Free(resLoginPacket);
+			SendPacket(sessionID, resLoginPacket);
 
-		return;
-	}
+			CPacket::Free(resLoginPacket);
 
-	// -----------------------------------------------------------
-	// 쿼리 성공
-	// -----------------------------------------------------------
+			return false;
+		}
+		// 테이블에 레코드 있음
+		else if (fetchResult == 0)
+		{
+			// 쿼리 성공 - 정보 추출
+			wchar_t ID[ID_MAX_LEN] = { 0 };
+			wchar_t Nickname[NICKNAME_MAX_LEN] = { 0 };
 
-	InterlockedIncrement64(&m_dbQueryTotal);
-	InterlockedIncrement64(&m_dbQueryTPS);
+			int length = MultiByteToWideChar(CP_UTF8, 0, id, strlen(id), NULL, NULL);
+			MultiByteToWideChar(CP_UTF8, 0, id, strlen(id), ID, length);
 
-	// row를 얻어와 column에 맞는 데이터 셋팅
-	// result[1] : id
-	// resultRow[3] : nickname
-	MYSQL_ROW resultRow = dbConn_TLS->FetchRow();
+			length = MultiByteToWideChar(CP_UTF8, 0, nickname, strlen(nickname), NULL, NULL);
+			MultiByteToWideChar(CP_UTF8, 0, nickname, strlen(nickname), Nickname, length);
 
-	// resultRow[1]의 wideLen
-	int wideCharLen = MultiByteToWideChar(CP_UTF8, 0, resultRow[1], strlen(resultRow[1]), 0, 0);
-	if (wideCharLen > ID_MAX_LEN)
-	{
-		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Login Request Packet # Multibyte To WideChar error > result[1] is too much size");
-		dbConn_TLS->FreeResult();
+			return true;
+		}
+		else
+		{
+			loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Error fetching result: : %s", mysql_stmt_error(stmt));
+			return false;
+		}
+		return true;
 
-		return;
-	}
+	}, _accountNo, id, nickname);
 
-	MultiByteToWideChar(CP_UTF8, 0, resultRow[1], strlen(resultRow[1]), ID, wideCharLen * sizeof(wchar_t));
-	ID[wideCharLen] = L'\0';
-
-	// resultRow[3]의 wideLen
-	wideCharLen = MultiByteToWideChar(CP_UTF8, 0, resultRow[3], strlen(resultRow[3]), 0, 0);
-	if (wideCharLen > NICKNAME_MAX_LEN)
-	{
-		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Login Request Packet # Multibyte To WideChar error > result[3] is too much size");
-		dbConn_TLS->FreeResult();
-
-		return;
-	}
-
-	MultiByteToWideChar(CP_UTF8, 0, resultRow[3], strlen(resultRow[3]), Nickname, wideCharLen * sizeof(wchar_t));
-	Nickname[wideCharLen] = L'\0';
-
-	dbConn_TLS->FreeResult();
-
-
-	// accountNo에 해당하는 sessionKey table 정보 select
-	query = L"select sessionkey from accountdb.sessionkey where accountno=";
-	query += std::to_wstring(_accountNo);
-	query += L";";
-
-	queryRet = dbConn_TLS->Query(query.c_str());
-
-	if (queryRet == -1)
-	{
-		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Login Request Packet # sessionkey select query fail");
-
-		return;
-	}
-	else if (queryRet == 0)
-	{
-		dbConn_TLS->FreeResult();
-
-		InterlockedIncrement64(&m_loginFailCount);
-		InterlockedIncrement64(&m_loginFailTPS);
-
-		status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_SESSION_MISS;
-
-		CPacket* resLoginPacket = CPacket::Alloc();
-
-		mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
-
-		SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
-
-		CPacket::Free(resLoginPacket);
-
-		return;
-	}
-
-	InterlockedIncrement64(&m_dbQueryTotal);
-	InterlockedIncrement64(&m_dbQueryTPS);
-
-	dbConn_TLS->FreeResult();
-
-	// accountNo에 해당하는 status table 정보 select
-	query = L"select status from accountdb.status where accountno=";
-	query += std::to_wstring(_accountNo);
-	query += L";";
-
-	queryRet = dbConn_TLS->Query(query.c_str());
-
-	if (queryRet == -1)
-	{
-		loginLog->logger(dfLOG_LEVEL_ERROR, __LINE__, L"Login Request Packet # status select query fail");
-		return;
-	}
-	else if (queryRet == 0)
-	{
-		dbConn_TLS->FreeResult();
-
-		InterlockedIncrement64(&m_loginFailCount);
-		InterlockedIncrement64(&m_loginFailTPS);
-
-		status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_STATUS_MISS;
-
-		CPacket* resLoginPacket = CPacket::Alloc();
-
-		mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
-
-		SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
-
-		CPacket::Free(resLoginPacket);
-
-		return;
-	}
-
-	InterlockedIncrement64(&m_dbQueryTotal);
-	InterlockedIncrement64(&m_dbQueryTPS);
-
-	dbConn_TLS->FreeResult();
 
 	// ------------------------------------------------------------------------
 	// Redis에 인증 토큰 저장 ("accountNo", "sessionKey")
 	// ------------------------------------------------------------------------
+	CRedis* mRedis = (CRedis*)TlsGetValue(this->_RedisTlsIdx);
+	if (mRedis == nullptr)
+	{
+		mRedis = new CRedis;
+		mRedis->Connect(redisIP, redisPort);
+
+		TlsSetValue(this->_RedisTlsIdx, mRedis);
+		tlsRedisObjects.Push(mRedis);
+	}
+	
 	std::string accountNoStr = std::to_string(_accountNo);
 	std::string sessionKeyStr;
 	sessionKeyStr.assign(sessionKey);
 
 	CPacket* resLoginPacket = CPacket::Alloc();
 
-	mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
+	MPResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
 
-	RedisJob* job = redisJobPool.Alloc();
-	job->sessionID = sessionID;
-	job->accountNo = accountNoStr;
-	job->sessionKey = sessionKeyStr;
-	job->packet = resLoginPacket;
 
-	redisJobQ.Enqueue(job);
-	SetEvent(m_redisJobEvent);
-	InterlockedIncrement64(&m_redisJobEnqueueTPS);
+	// redis에 인증 토큰 저장 (30초 후에 토큰 만료)
+	if (!mRedis->syncSet(accountNoStr, sessionKeyStr, 30))
+	{
+		// redis set 실패 시 동작
+		status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_NONE;
 
-	//// redis에 인증 토큰 저장 (30초 후에 토큰 만료)
-	//if (!mRedis->syncSet(accountNoStr, sessionKeyStr, 30))
-	//{
-	//	// redis set 실패 시 동작
-	//	status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_NONE;
+		CPacket* resLoginPacket = CPacket::Alloc();
 
-	//	CPacket* resLoginPacket = CPacket::Alloc();
+		MPResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
 
-	//	mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
+		SendPacket(sessionID, resLoginPacket);
 
-	//	SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
+		CPacket::Free(resLoginPacket);
+	}
 
-	//	CPacket::Free(resLoginPacket);
-	//}
-
-	//InterlockedIncrement64(&m_redisSetCnt);
-	//InterlockedIncrement64(&m_redisSetTPS);
-
-	//// account table에 있는 정보이므로 로그인 성공 & 인증 성공
-	//InterlockedIncrement64(&m_loginSuccessCount);
-	//InterlockedIncrement64(&m_loginSuccessTPS);
-
-	//CPacket* resLoginPacket = CPacket::Alloc();
-
-	//mpResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
-
-	//// 응답을 보낸 뒤, 100ms 뒤에 로그인 서버와의 연결을 끊음
-	//SendPacketAndDisconnect(sessionID, resLoginPacket, 100);
-
-	//CPacket::Free(resLoginPacket);
-}
-
-// 비동기 redis 요청 결과를 얻은 뒤, 이후 로그인 job 처리
-void LoginServer::netPacketProc_ResLoginRedis(uint64_t sessionID, CPacket* packet)
-{
 	// account table에 있는 정보이므로 로그인 성공 & 인증 성공
 	InterlockedIncrement64(&m_loginSuccessCount);
 	InterlockedIncrement64(&m_loginSuccessTPS);
 
-	//// 응답을 보낸 뒤, 100ms 뒤에 로그인 서버와의 연결을 끊음
-	//SendPacketAndDisconnect(sessionID, packet, 100);
+	CPacket* resLoginPacket = CPacket::Alloc();
 
-	// 로그인 응답
-	SendPacket(sessionID, packet);
+	MPResLogin(resLoginPacket, _accountNo, status, ID, Nickname, gameServerIp, gameServerPort, chatIP, chatPort);
+
+	// 응답을 보낸 뒤, 100ms 뒤에 로그인 서버와의 연결을 끊음
+	SendPacket(sessionID, resLoginPacket);
+
+	CPacket::Free(resLoginPacket);
 }

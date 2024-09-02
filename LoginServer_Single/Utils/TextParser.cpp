@@ -1,9 +1,10 @@
 #pragma warning(disable :4996)
 
-#include "../PCH.h"
 #include "TextParser.h"
 
+#include <stdlib.h>
 #include <stack>
+#include <wchar.h>
 
 TextParser::TextParser() : buffer(NULL), parsingTxt(NULL), parsingStart(NULL), blocksTxt(NULL), _size(0) {}
 

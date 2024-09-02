@@ -1,7 +1,5 @@
-#pragma once
 #ifndef __PROFILING__
 #define __PROFILING__
-
 
 //---------------------------------------------------------------------------
 // Profiling Program 

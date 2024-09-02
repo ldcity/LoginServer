@@ -1,7 +1,14 @@
 #ifndef __LanClient_CLASS__
 #define __LanClient_CLASS__
 
-#include "../PCH.h"
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <process.h>
+
+#include "SerializingBuffer.h"
+#include "Session.h"
+#include "LockFreeStack.h"
+#include "../Utils/LOG.h"
 
 // 내부 서버간 통신 모듈 클래스
 class LanClient
@@ -93,8 +100,8 @@ private:
 
 	std::vector<HANDLE> mWorkerThreads;							// Worker Threads Count
 
-	long s_workerThreadCount;								// Worker Thread Count (Server)
-	long s_runningThreadCount;								// Running Thread Count (Server)
+	long mWorkerThreadCount;								// Worker Thread Count (Server)
+	long mRunningThreadCount;								// Running Thread Count (Server)
 
 	enum PQCSTYPE
 	{

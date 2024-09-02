@@ -1,5 +1,9 @@
-#include "../PCH.h"
+#include <process.h>
+
 #include "MonitoringLanClient.h"
+#include "../Utils/TextParser.h"
+#include "../Utils/MonitorProtocol.h"
+#include "../Utils/MonitoringDefine.h"
 
 unsigned __stdcall ConnectThread(LPVOID param)
 {

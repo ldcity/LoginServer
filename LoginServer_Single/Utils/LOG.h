@@ -1,8 +1,9 @@
-#pragma once
-#ifndef __LOG __H__
-#define __LOG __H__
+#ifndef __LOG__H__
+#define __LOG__H__
 
-#include "../PCH.h"
+#include <Windows.h>
+#include <stdio.h>
+#include <time.h>
 
 #define dfLOG_LEVEL_DEBUG		0
 #define dfLOG_LEVEL_ERROR		1
